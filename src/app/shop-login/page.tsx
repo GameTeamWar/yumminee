@@ -587,7 +587,7 @@ export default function ShopLoginPage() {
                                 <div className="space-y-3">
                                   <Label className="text-sm font-medium">Mutfak Türleri (En az 1, en fazla 3)</Label>
                                   <div className="grid grid-cols-2 gap-3">
-                                    {{
+                                    {[
                                       'Türk Mutfağı',
                                       'İtalyan',
                                       'Fast Food',
@@ -602,7 +602,7 @@ export default function ShopLoginPage() {
                                       'Kahve & Çay',
                                       'Street Food',
                                       'Dünya Mutfağı'
-                                    }.map((cuisineType) => (
+                                    ].map((cuisineType) => (
                                       <div key={cuisineType} className="flex items-center space-x-2">
                                         <input
                                           type="checkbox"

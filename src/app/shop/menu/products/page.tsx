@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import {
   Search,
@@ -37,6 +38,7 @@ interface Product {
   name: string
   description: string
   price: number
+  originalPrice?: number
   imageUrl?: string
   categoryIds?: string[]
   categoryNames?: string[]
@@ -65,6 +67,8 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [availabilityFilter, setAvailabilityFilter] = useState('all')
+  const [editingPrice, setEditingPrice] = useState<string | null>(null)
+  const [priceInputValue, setPriceInputValue] = useState('')
 
   useEffect(() => {
     if (!user?.uid) {
@@ -102,9 +106,11 @@ export default function ProductsPage() {
 
         // Kategorileri getir
         const categoriesQuery = query(
-          collection(db, 'restaurants', restaurantId, 'categories'),
+          collection(db, 'categories'),
+          where('restaurantId', '==', restaurant.ownerId || restaurant.id),
+          where('isActive', '==', true),
           orderBy('name', 'asc')
-        )
+        );
 
         const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
           const categoriesData: Category[] = []
@@ -151,6 +157,43 @@ export default function ProductsPage() {
     }
   }
 
+  const handlePriceEdit = (productId: string, currentPrice: number) => {
+    setEditingPrice(productId)
+    setPriceInputValue(currentPrice.toString())
+  }
+
+  const handlePriceSave = async (productId: string) => {
+    const newPrice = parseFloat(priceInputValue)
+    if (isNaN(newPrice) || newPrice < 0) {
+      toast.error('Geçerli bir fiyat girin')
+      return
+    }
+
+    try {
+      const product = products.find(p => p.id === productId)
+      if (!product) return
+
+      // Eğer fiyat düşmüşse originalPrice'ı ayarla
+      const updateData: any = { price: newPrice }
+      if (newPrice < product.price) {
+        updateData.originalPrice = product.price
+      }
+
+      await updateDoc(doc(db, 'products', productId), updateData)
+      toast.success('Fiyat güncellendi')
+      setEditingPrice(null)
+      setPriceInputValue('')
+    } catch (error) {
+      console.error('Error updating price:', error)
+      toast.error('Fiyat güncellenirken hata oluştu')
+    }
+  }
+
+  const handlePriceCancel = () => {
+    setEditingPrice(null)
+    setPriceInputValue('')
+  }
+
   // Filter products
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -164,14 +207,6 @@ export default function ProductsPage() {
 
     return matchesSearch && matchesCategory && matchesAvailability
   })
-
-  const getAvailabilityBadge = (isAvailable: boolean) => {
-    return (
-      <Badge variant={isAvailable ? "default" : "secondary"} className={isAvailable ? "bg-green-100 text-green-800" : ""}>
-        {isAvailable ? 'Mevcut' : 'Mevcut Değil'}
-      </Badge>
-    )
-  }
 
   if (loading) {
     return (
@@ -202,7 +237,7 @@ export default function ProductsPage() {
           <h1 className="text-3xl font-bold">Ürün Yönetimi</h1>
           <p className="text-muted-foreground">Menünüzdeki ürünleri yönetin</p>
         </div>
-        <Button onClick={() => router.push('/shop/menu/add-product')}>
+        <Button onClick={() => router.push('/shop/menu/add-product?panel=' + new URLSearchParams(window.location.search).get('panel'))}>
           <Plus className="w-4 h-4 mr-2" />
           Yeni Ürün
         </Button>
@@ -269,12 +304,14 @@ export default function ProductsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-20">Görsel</TableHead>
-                  <TableHead className="min-w-[200px]">İsim</TableHead>
-                  <TableHead className="w-24">Fiyat</TableHead>
-                  <TableHead className="min-w-[120px]">Kategori</TableHead>
-                  <TableHead className="min-w-[200px]">Malzemeler</TableHead>
-                  <TableHead className="min-w-[120px]">Opsiyonlar</TableHead>
-                  <TableHead className="w-20">İşlemler</TableHead>
+                  <TableHead className="min-w-[100px]">İsim</TableHead>
+                  <TableHead className="min-w-[100px]">Tahmini Hazırlama Süresi</TableHead>
+                  <TableHead className="min-w-[100px]">Fiyat</TableHead>
+                  <TableHead className="min-w-[100px]">Kategori</TableHead>
+                  <TableHead className="min-w-[100px]">Malzemeler</TableHead>
+                  <TableHead className="min-w-[100px]">Opsiyonlar</TableHead>
+                  <TableHead className="min-w-[100px]">Durum</TableHead>
+                  <TableHead className="min-w-[10px]">İşlemler</TableHead>
                 </TableRow>
               </TableHeader>
             <TableBody>
@@ -297,28 +334,73 @@ export default function ProductsPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col space-y-1">
-                      <span className="font-medium text-sm">{product.name}</span>
-                      <div className="flex items-center gap-1">
-                        {getAvailabilityBadge(product.isAvailable)}
-                        {product.preparationTime && (
-                          <Badge variant="outline" className="text-xs px-1 py-0">
-                            {product.preparationTime} dk
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
+                    <span className="font-medium text-sm capitalize">{product.name}</span>
                   </TableCell>
                   <TableCell>
-                    <span className="font-semibold text-green-600">
-                      ₺{product.price.toFixed(2)}
-                    </span>
+                    {product.preparationTime ? (
+                      <Badge variant="outline" className="text-xs px-2 py-1 w-fit bg-orange-50 border-orange-200 text-orange-700">
+                        {product.preparationTime} dk
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-gray-400">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {product.originalPrice && product.originalPrice > product.price && (
+                        <span className="text-sm text-gray-500 line-through">
+                          ₺{product.originalPrice.toFixed(2)}
+                        </span>
+                      )}
+                      {editingPrice === product.id ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={priceInputValue}
+                            onChange={(e) => setPriceInputValue(e.target.value)}
+                            className="w-20 h-8 text-sm"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handlePriceSave(product.id)
+                              } else if (e.key === 'Escape') {
+                                handlePriceCancel()
+                              }
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handlePriceSave(product.id)}
+                            className="h-8 px-2"
+                          >
+                            ✓
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handlePriceCancel}
+                            className="h-8 px-2"
+                          >
+                            ✕
+                          </Button>
+                        </div>
+                      ) : (
+                        <span 
+                          className="font-semibold text-green-600 cursor-pointer hover:text-green-700"
+                          onClick={() => handlePriceEdit(product.id, product.price)}
+                        >
+                          ₺{product.price.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {product.categoryNames && product.categoryNames.length > 0 ? (
                         product.categoryNames.map((name, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
+                          <Badge key={index} variant="outline" className="text-xs capitalize">
                             {name}
                           </Badge>
                         ))
@@ -342,7 +424,7 @@ export default function ProductsPage() {
                       {product.optionNames && product.optionNames.length > 0 ? (
                         <>
                           {product.optionNames.slice(0, 2).map((option, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs px-1 py-0">
+                            <Badge key={index} variant="secondary" className="text-xs px-1 py-0 capitalize">
                               {option}
                             </Badge>
                           ))}
@@ -358,6 +440,14 @@ export default function ProductsPage() {
                     </div>
                   </TableCell>
                   <TableCell>
+                    <div className="flex items-center justify-center">
+                      <Switch
+                        checked={product.isAvailable}
+                        onCheckedChange={() => handleToggleAvailability(product)}
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm">
@@ -365,13 +455,9 @@ export default function ProductsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => router.push(`/shop/menu/edit-product?id=${product.id}`)}>
+                        <DropdownMenuItem onClick={() => router.push(`/shop/menu/edit-product?id=${product.id}&panel=${new URLSearchParams(window.location.search).get('panel')}`)}>
                           <Edit className="mr-2 h-4 w-4" />
                           Düzenle
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleToggleAvailability(product)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          {product.isAvailable ? 'Gizle' : 'Göster'}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -404,7 +490,7 @@ export default function ProductsPage() {
                 }
               </p>
               {(!searchTerm && selectedCategory === 'all' && availabilityFilter === 'all') && (
-                <Button onClick={() => router.push('/shop/menu/add-product')}>
+                <Button onClick={() => router.push('/shop/menu/add-product?panel=' + new URLSearchParams(window.location.search).get('panel'))}>
                   <Plus className="h-4 w-4 mr-2" />
                   İlk Ürünü Ekle
                 </Button>

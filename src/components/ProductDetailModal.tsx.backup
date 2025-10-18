@@ -22,6 +22,8 @@ import { Product, Restaurant } from '@/types';
 import { CustomerAddress } from '@/lib/firebase/db';
 import { useCart } from '@/contexts/CartContext';
 import { getRestaurantStatus } from '@/lib/utils/restaurantHours';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
 
 interface ProductDetailModalProps {
   isOpen: boolean;
@@ -29,18 +31,17 @@ interface ProductDetailModalProps {
   product: Product | null;
   restaurant: Restaurant | null;
   selectedAddress: CustomerAddress | null;
-  onAddressSelect: () => void;
+: () => void;
   options?: any[];
 }
 
-export default function ProductDetailModal({
-  isOpen,
-  onClose,
-  product,
-  restaurant,
-  selectedAddress,
-  onAddressSelect,
-  options = []
+export default function ProductDetailModal({ options = [] }: ProductDetailModalProps) {{{ options = [] }: ProductDetailModalProps) {{
+
+
+
+
+
+
 }: ProductDetailModalProps) {
   const { addToCart } = useCart();
   const [quantity, setQuantity] = useState(1);
@@ -58,15 +59,32 @@ export default function ProductDetailModal({
       setShowRestaurantClosed(false);
       setShowAddressRequired(false);
 
-      // Opsiyon gruplarını product.optionIds ile eşleştir
-      if (product.optionIds && product.optionIds.length > 0 && options.length > 0) {
-        const productOptions = options.filter(option => product.optionIds!.includes(option.id));
-        setOptionGroups(productOptions);
+      // Opsiyon gruplarını yükle
+      if (product.optionIds && product.optionIds.length > 0 && restaurant) {
+        const loadOptionGroups = async () => {
+          try {
+            const optionGroupsData: any[] = [];
+            for (const optionId of product.optionIds!) {
+              const optionDoc = await getDoc(doc(db, 'restaurants', restaurant.id, 'options', optionId));
+              if (optionDoc.exists()) {
+                optionGroupsData.push({
+                  id: optionDoc.id,
+                  ...optionDoc.data()
+                });
+              }
+            }
+            setOptionGroups(optionGroupsData);
+          } catch (error) {
+            console.error('Opsiyon grupları yüklenirken hata:', error);
+            setOptionGroups([]);
+          }
+        };
+        loadOptionGroups();
       } else {
         setOptionGroups([]);
       }
     }
-  }, [isOpen, product, options]);
+  }, [isOpen, product, restaurant]);
 
   const handleOptionChange = (optionId: string, itemId: string, isMultiple: boolean = false) => {
     setSelectedOptions(prev => {
@@ -216,16 +234,9 @@ export default function ProductDetailModal({
                   )}
                 </div>
                 <div className="text-right">
-                  <div className="flex items-center gap-2 justify-end">
-                    {product.originalPrice && product.originalPrice > product.price && (
-                      <span className="text-lg text-gray-500 line-through">
-                        ₺{product.originalPrice.toFixed(2)}
-                      </span>
-                    )}
-                    <span className="text-2xl font-bold text-orange-600">
-                      ₺{product.price.toFixed(2)}
-                    </span>
-                  </div>
+                  <span className="text-2xl font-bold text-orange-600">
+                    ₺{product.price.toFixed(2)}
+                  </span>
                 </div>
               </div>
 
@@ -360,15 +371,8 @@ export default function ProductDetailModal({
 
               <div className="text-right">
                 <div className="text-sm text-gray-600">Toplam:</div>
-                <div className="flex items-center gap-2 justify-end">
-                  {product.originalPrice && product.originalPrice > product.price && (
-                    <span className="text-lg text-gray-500 line-through">
-                      ₺{(product.originalPrice * quantity).toFixed(2)}
-                    </span>
-                  )}
-                  <span className="text-2xl font-bold text-orange-600">
-                    ₺{calculateTotalPrice().toFixed(2)}
-                  </span>
+                <div className="text-2xl font-bold text-orange-600">
+                  ₺{calculateTotalPrice().toFixed(2)}
                 </div>
               </div>
             </div>
@@ -442,7 +446,7 @@ export default function ProductDetailModal({
               <Button
                 onClick={() => {
                   setShowAddressRequired(false);
-                  onAddressSelect();
+                ();
                 }}
                 className="flex-1 bg-orange-500 hover:bg-orange-600"
               >

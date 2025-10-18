@@ -10,6 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { ArrowLeft, Plus, X, Upload } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -33,18 +35,16 @@ export default function AddProductPage() {
     name: '',
     description: '',
     price: '',
+    originalPrice: '',
     categoryIds: [] as string[],
     optionIds: [] as string[],
     imageUrl: '',
     isAvailable: true,
     preparationTime: '',
-    allergens: [] as string[],
-    nutritionalInfo: {
-      calories: '',
-      protein: '',
-      carbs: '',
-      fat: ''
-    }
+    brand: '',
+    vatRate: '',
+    specialCategory: '',
+    allergens: [] as string[]
   });
 
   // Common allergens
@@ -79,7 +79,8 @@ export default function AddProductPage() {
 
         // Kategorileri yükle
         const categoriesQuery = query(
-          collection(db, 'restaurants', restaurantId, 'categories'),
+          collection(db, 'categories'),
+          where('restaurantId', '==', restaurantData.ownerId || restaurantData.id),
           where('isActive', '==', true)
         );
 
@@ -93,7 +94,8 @@ export default function AddProductPage() {
 
         // Opsiyonları yükle
         const optionsQuery = query(
-          collection(db, 'restaurants', restaurantId, 'options'),
+          collection(db, 'options'),
+          where('restaurantId', '==', restaurantData.ownerId || restaurantData.id),
           where('isActive', '==', true)
         );
 
@@ -195,20 +197,18 @@ export default function AddProductPage() {
         name: productData.name,
         description: productData.description,
         price: parseFloat(productData.price),
+        originalPrice: productData.originalPrice ? parseFloat(productData.originalPrice) : null,
         categoryIds: productData.categoryIds,
         categoryNames: selectedCategories.map(cat => cat.name),
         optionIds: productData.optionIds,
         optionNames: selectedOptions.map(opt => opt.name),
         imageUrl: productData.imageUrl,
-        isAvailable: productData.isAvailable,
+        isActive: productData.isAvailable,
         preparationTime: productData.preparationTime ? parseInt(productData.preparationTime) : null,
+        brand: productData.brand || null,
+        vatRate: productData.vatRate ? parseInt(productData.vatRate) : null,
+        specialCategory: productData.specialCategory || null,
         allergens: productData.allergens,
-        nutritionalInfo: {
-          calories: productData.nutritionalInfo.calories ? parseFloat(productData.nutritionalInfo.calories) : null,
-          protein: productData.nutritionalInfo.protein ? parseFloat(productData.nutritionalInfo.protein) : null,
-          carbs: productData.nutritionalInfo.carbs ? parseFloat(productData.nutritionalInfo.carbs) : null,
-          fat: productData.nutritionalInfo.fat ? parseFloat(productData.nutritionalInfo.fat) : null,
-        },
         restaurantId: restaurant.id,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -218,7 +218,7 @@ export default function AddProductPage() {
       await addDoc(collection(db, 'products'), productToSave);
 
       toast.success('Ürün başarıyla eklendi!');
-      router.push('/shop/menu/products');
+      router.push('/shop/menu/products?panel=' + new URLSearchParams(window.location.search).get('panel'));
 
     } catch (error) {
       console.error('Ürün eklenirken hata:', error);
@@ -274,306 +274,89 @@ export default function AddProductPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column - Basic Info */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Temel Bilgiler</CardTitle>
-                <CardDescription>
-                  Ürününüzün temel bilgilerini girin
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Ürün Adı *</Label>
+        {/* Ürün Bilgileri */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Ürün Bilgileri</CardTitle>
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="isAvailable">Satışa Açık</Label>
+                <Switch
+                  id="isAvailable"
+                  checked={productData.isAvailable}
+                  onCheckedChange={(checked) =>
+                    setProductData(prev => ({ ...prev, isAvailable: checked }))
+                  }
+                />
+              </div>
+            </div>
+            <CardDescription>
+              Ürün adının net olması, ürün açıklamasının detaylı yapılması ve ürünün fotoğraflarının bulunması, müşterilerin ne sipariş vereceğine karar vermelerine yardımcı olur ve satışları artırır!
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Ürün Adı */}
+            <div>
+              <Label htmlFor="name">Ürün Adı *</Label>
+              <Input
+                id="name"
+                value={productData.name}
+                onChange={(e) => setProductData(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Ürün Adı Giriniz"
+                required
+                className="capitalize"
+              />
+            </div>
+
+            {/* Fiyatlar */}
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <Label htmlFor="price">Satış Fiyatı *</Label>
                   <Input
-                    id="name"
-                    value={productData.name}
-                    onChange={(e) => setProductData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Örn: Margarita Pizza"
+                    id="price"
+                    type="number"
+                    step="0.01"
+                    value={productData.price}
+                    onChange={(e) => setProductData(prev => ({ ...prev, price: e.target.value }))}
+                    placeholder="0.00"
                     required
                   />
                 </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs">
+                  Uygulamada görünen fiyatlardır.
+                </Badge>
+              </div>
+            </div>
 
+            {/* Ürün Görseli */}
+            <div>
+              <Label>Ürün Görseli</Label>
+              <div className="flex gap-4 mt-2">
                 <div>
-                  <Label htmlFor="description">Açıklama</Label>
-                  <Textarea
-                    id="description"
-                    value={productData.description}
-                    onChange={(e) => setProductData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Ürününüz hakkında kısa bir açıklama..."
-                    rows={3}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="price">Fiyat (₺) *</Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      step="0.01"
-                      value={productData.price}
-                      onChange={(e) => setProductData(prev => ({ ...prev, price: e.target.value }))}
-                      placeholder="29.90"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="preparationTime">Hazırlama Süresi (dk)</Label>
-                    <Input
-                      id="preparationTime"
-                      type="number"
-                      value={productData.preparationTime}
-                      onChange={(e) => setProductData(prev => ({ ...prev, preparationTime: e.target.value }))}
-                      placeholder="30"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="category">Kategori *</Label>
-                    <div className="flex gap-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="flex-1 justify-start text-left font-normal"
-                          >
-                            {(() => {
-                              const validCategoryIds = productData.categoryIds.filter(id =>
-                                categories.some(cat => (cat.customId || cat.id) === id)
-                              );
-                              return validCategoryIds.length > 0
-                                ? `${validCategoryIds.length} kategori seçildi`
-                                : categories.length > 0
-                                  ? "Kategori seçilmedi"
-                                  : "Önce kategori ekleyin";
-                            })()}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80" align="start">
-                          <div className="space-y-2">
-                            <h4 className="font-medium leading-none">Kategoriler</h4>
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {categories.map((category) => (
-                                <div key={category.id} className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`category-${category.id}`}
-                                    checked={productData.categoryIds.includes(category.customId || category.id)}
-                                    onCheckedChange={() => handleCategoryToggle(category.customId || category.id)}
-                                  />
-                                  <Label
-                                    htmlFor={`category-${category.id}`}
-                                    className="text-sm cursor-pointer"
-                                  >
-                                    {category.name}
-                                  </Label>
-                                </div>
-                              ))}
-                              {categories.length === 0 && (
-                                <p className="text-sm text-gray-500">Henüz kategori eklenmemiş</p>
-                              )}
-                            </div>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push('/shop/menu/categories')}
-                        className="px-3"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="option">Opsiyon (İsteğe bağlı)</Label>
-                    <div className="flex gap-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="flex-1 justify-start text-left font-normal"
-                          >
-                            {(() => {
-                              const validOptionIds = productData.optionIds.filter(id =>
-                                options.some(opt => (opt.customId || opt.id) === id)
-                              );
-                              return validOptionIds.length > 0
-                                ? `${validOptionIds.length} opsiyon seçildi`
-                                : options.length > 0
-                                  ? "Opsiyon seçilmedi"
-                                  : "Önce opsiyon ekleyin";
-                            })()}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80" align="start">
-                          <div className="space-y-2">
-                            <h4 className="font-medium leading-none">Opsiyonlar</h4>
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {options.map((option) => (
-                                <div key={option.id} className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`option-${option.id}`}
-                                    checked={productData.optionIds.includes(option.customId || option.id)}
-                                    onCheckedChange={() => handleOptionToggle(option.customId || option.id)}
-                                  />
-                                  <Label
-                                    htmlFor={`option-${option.id}`}
-                                    className="text-sm cursor-pointer"
-                                  >
-                                    {option.name}
-                                  </Label>
-                                </div>
-                              ))}
-                              {options.length === 0 && (
-                                <p className="text-sm text-gray-500">Henüz opsiyon eklenmemiş</p>
-                              )}
-                            </div>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push('/shop/menu/options')}
-                        className="px-3"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="isAvailable"
-                    checked={productData.isAvailable}
-                    onCheckedChange={(checked) =>
-                      setProductData(prev => ({ ...prev, isAvailable: checked as boolean }))
-                    }
-                  />
-                  <Label htmlFor="isAvailable">Mevcut</Label>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Nutritional Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Besin Değerleri (100g için)</CardTitle>
-                <CardDescription>
-                  İsteğe bağlı: Ürününüzün besin değerlerini belirtin
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="calories">Kalori</Label>
-                    <Input
-                      id="calories"
-                      type="number"
-                      value={productData.nutritionalInfo.calories}
-                      onChange={(e) => setProductData(prev => ({
-                        ...prev,
-                        nutritionalInfo: { ...prev.nutritionalInfo, calories: e.target.value }
-                      }))}
-                      placeholder="250"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="protein">Protein (g)</Label>
-                    <Input
-                      id="protein"
-                      type="number"
-                      step="0.1"
-                      value={productData.nutritionalInfo.protein}
-                      onChange={(e) => setProductData(prev => ({
-                        ...prev,
-                        nutritionalInfo: { ...prev.nutritionalInfo, protein: e.target.value }
-                      }))}
-                      placeholder="15.5"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="carbs">Karbonhidrat (g)</Label>
-                    <Input
-                      id="carbs"
-                      type="number"
-                      step="0.1"
-                      value={productData.nutritionalInfo.carbs}
-                      onChange={(e) => setProductData(prev => ({
-                        ...prev,
-                        nutritionalInfo: { ...prev.nutritionalInfo, carbs: e.target.value }
-                      }))}
-                      placeholder="25.0"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="fat">Yağ (g)</Label>
-                    <Input
-                      id="fat"
-                      type="number"
-                      step="0.1"
-                      value={productData.nutritionalInfo.fat}
-                      onChange={(e) => setProductData(prev => ({
-                        ...prev,
-                        nutritionalInfo: { ...prev.nutritionalInfo, fat: e.target.value }
-                      }))}
-                      placeholder="8.5"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Column - Image and Allergens */}
-          <div className="space-y-6">
-            {/* Image Upload */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Ürün Görseli</CardTitle>
-                <CardDescription>
-                  Ürününüzün yüksek kaliteli bir fotoğrafını yükleyin
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
                   {productData.imageUrl ? (
                     <div className="relative">
                       <img
                         src={productData.imageUrl}
                         alt="Ürün görseli"
-                        className="w-full h-48 object-cover rounded-lg"
+                        className="w-36 h-36 object-cover rounded-lg border"
                       />
                       <Button
                         type="button"
                         variant="destructive"
                         size="sm"
-                        className="absolute top-2 right-2"
+                        className="absolute top-1 right-1 h-6 w-6 p-0"
                         onClick={() => setProductData(prev => ({ ...prev, imageUrl: '' }))}
                       >
-                        <X className="h-4 w-4" />
+                        <X className="h-3 w-3" />
                       </Button>
                     </div>
                   ) : (
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                      <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600 mb-4">
-                        Ürün görselini sürükleyin veya seçin
-                      </p>
+                    <div className="w-36 h-36 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors">
+                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-600 text-center">Görsel Ekle</p>
                       <Input
                         type="file"
                         accept="image/*"
@@ -581,92 +364,351 @@ export default function AddProductPage() {
                         className="hidden"
                         id="image-upload"
                       />
-                      <Label htmlFor="image-upload">
-                        <Button type="button" variant="outline" asChild>
-                          <span>Görsel Seç</span>
+                      <Label htmlFor="image-upload" className="cursor-pointer">
+                        <Button type="button" variant="outline" size="sm" className="mt-2">
+                          Dosya Seç
                         </Button>
                       </Label>
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+                <div className="flex-1 space-y-2">
+                  <p className="text-sm">
+                    <span className="font-medium">Dosya Boyutu:</span>
+                    <span className="text-muted-foreground ml-1">10 MB'a kadar JPG veya PNG</span>
+                  </p>
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Gereken Minimum Pixel:</span>
+                    <span className="font-medium ml-1">Genişlik için 375px, yükseklik için 375px</span>
+                  </p>
+                </div>
+              </div>
+            </div>
 
-            {/* Allergens */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Alerjenler</CardTitle>
-                <CardDescription>
-                  Ürününüzde bulunan alerjenleri seçin veya yeni alerjen ekleyin
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {/* Add new allergen */}
-                <div className="flex gap-2 mb-4">
-                  <Input
-                    placeholder="Yeni alerjen ekleyin..."
-                    value={newAllergen}
-                    onChange={(e) => setNewAllergen(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddAllergen())}
-                  />
+            {/* Ürün Açıklaması */}
+            <div>
+              <Label htmlFor="description">Ürün Açıklaması</Label>
+              <Textarea
+                id="description"
+                value={productData.description}
+                onChange={(e) => setProductData(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Ürün Açıklaması Giriniz"
+                rows={5}
+              />
+            </div>
+
+            {/* Kategoriler */}
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <Label htmlFor="category">Ürünün Bulunduğu Kategori *</Label>
+                <div className="flex gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="flex-1 justify-start text-left font-normal"
+                      >
+                        {(() => {
+                          const validCategoryIds = productData.categoryIds.filter(id =>
+                            categories.some(cat => (cat.customId || cat.id) === id)
+                          );
+                          return validCategoryIds.length > 0
+                            ? `${validCategoryIds.length} kategori seçildi`
+                            : categories.length > 0
+                              ? "Kategori seçilmedi"
+                              : "Önce kategori ekleyin";
+                        })()}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80" align="start">
+                      <div className="space-y-2">
+                        <h4 className="font-medium leading-none">Kategoriler</h4>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {categories.map((category) => (
+                            <div key={category.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`category-${category.id}`}
+                                checked={productData.categoryIds.includes(category.customId || category.id)}
+                                onCheckedChange={() => handleCategoryToggle(category.customId || category.id)}
+                              />
+                              <Label
+                                htmlFor={`category-${category.id}`}
+                                className="text-sm cursor-pointer"
+                              >
+                                {category.name}
+                              </Label>
+                            </div>
+                          ))}
+                          {categories.length === 0 && (
+                            <p className="text-sm text-gray-500">Henüz kategori eklenmemiş</p>
+                          )}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <Button
                     type="button"
-                    onClick={handleAddAllergen}
-                    disabled={!newAllergen.trim()}
+                    variant="outline"
                     size="sm"
+                    onClick={() => router.push('/shop/menu/categories?panel=' + new URLSearchParams(window.location.search).get('panel'))}
+                    className="px-3"
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
+              </div>
 
-                {/* Common allergens */}
-                <div className="mb-4">
-                  <Label className="text-sm font-medium mb-2 block">Yaygın Alerjenler:</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {commonAllergens.map((allergen) => (
-                      <div key={allergen} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`allergen-${allergen}`}
-                          checked={productData.allergens.includes(allergen)}
-                          onCheckedChange={() => handleAllergenToggle(allergen)}
-                        />
-                        <Label
-                          htmlFor={`allergen-${allergen}`}
-                          className="text-sm cursor-pointer"
-                        >
-                          {allergen}
-                        </Label>
+              {/* Opsiyonlar */}
+              <div>
+                <Label htmlFor="options">Ürün Opsiyonları</Label>
+                <div className="flex gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="flex-1 justify-start text-left font-normal"
+                      >
+                        {(() => {
+                          const validOptionIds = productData.optionIds.filter(id =>
+                            options.some(opt => (opt.customId || opt.id) === id)
+                          );
+                          return validOptionIds.length > 0
+                            ? `${validOptionIds.length} opsiyon seçildi`
+                            : options.length > 0
+                              ? "Opsiyon seçilmedi"
+                              : "Önce opsiyon ekleyin";
+                        })()}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80" align="start">
+                      <div className="space-y-2">
+                        <h4 className="font-medium leading-none">Opsiyonlar</h4>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {options.map((option) => (
+                            <div key={option.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`option-${option.id}`}
+                                checked={productData.optionIds.includes(option.customId || option.id)}
+                                onCheckedChange={() => handleOptionToggle(option.customId || option.id)}
+                              />
+                              <Label
+                                htmlFor={`option-${option.id}`}
+                                className="text-sm cursor-pointer"
+                              >
+                                {option.name}
+                              </Label>
+                            </div>
+                          ))}
+                          {options.length === 0 && (
+                            <p className="text-sm text-gray-500">Henüz opsiyon eklenmemiş</p>
+                          )}
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    </PopoverContent>
+                  </Popover>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push('/shop/menu/options?panel=' + new URLSearchParams(window.location.search).get('panel'))}
+                    className="px-3"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
                 </div>
+              </div>
 
-                {/* Selected allergens */}
-                {productData.allergens.length > 0 && (
-                  <div className="mt-4">
-                    <Label>Seçilen Alerjenler:</Label>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {productData.allergens.map((allergen) => (
-                        <Badge key={allergen} variant="secondary">
-                          {allergen}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-4 w-4 p-0 ml-1"
-                            onClick={() => handleRemoveAllergen(allergen)}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      ))}
-                    </div>
+              {/* <div>
+                <Label htmlFor="specialCategory">Ürünün Özel Menü Kategorisi</Label>
+                <Select value={productData.specialCategory} onValueChange={(value) => setProductData(prev => ({ ...prev, specialCategory: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seçiniz" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="coca-cola">Coca-Cola Doyuran Menüleri</SelectItem>
+                    <SelectItem value="algida">Avantajlı Algida Menüleri</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div> */}
+            </div>
+
+            {/* Marka ve KDV */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="brand">Ürünün Markası</Label>
+                <Select value={productData.brand} onValueChange={(value) => setProductData(prev => ({ ...prev, brand: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seçiniz" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pepsi">Pepsi</SelectItem>
+                    <SelectItem value="coca-cola">Coca Cola</SelectItem>
+                    <SelectItem value="tropicana">Tropicana</SelectItem>
+                    <SelectItem value="fruko">Fruko</SelectItem>
+                    <SelectItem value="yedigun">Yedigün</SelectItem>
+                    <SelectItem value="7up">7up</SelectItem>
+                    <SelectItem value="lipton">Lipton Ice Tea</SelectItem>
+                    <SelectItem value="damla">Damla</SelectItem>
+                    <SelectItem value="sprite">Sprite</SelectItem>
+                    <SelectItem value="fanta">Fanta</SelectItem>
+                    <SelectItem value="cappy">Cappy</SelectItem>
+                    <SelectItem value="fusetea">Fusetea</SelectItem>
+                    <SelectItem value="burn">Burn</SelectItem>
+                    <SelectItem value="monster">Monster Energy</SelectItem>
+                    <SelectItem value="powerade">Powerade</SelectItem>
+                    <SelectItem value="schweppes">Schweppes</SelectItem>
+                    <SelectItem value="aquafina">Aquafina</SelectItem>
+                    <SelectItem value="predator">Predator</SelectItem>
+                    <SelectItem value="cola-turka">Cola Turka</SelectItem>
+                    <SelectItem value="algida">Algida</SelectItem>
+                    <SelectItem value="yumurta">Yumurta</SelectItem>
+                    <SelectItem value="kuruyemis">Kuruyemiş</SelectItem>
+                    <SelectItem value="manav">Manav</SelectItem>
+                    <SelectItem value="meze">Meze</SelectItem>
+                    <SelectItem value="firin">Fırın</SelectItem>
+                    <SelectItem value="kaplan">Kaplan</SelectItem>
+                    <SelectItem value="mezeturk">Mezetürk</SelectItem>
+                    <SelectItem value="sozen">Sözen</SelectItem>
+                    <SelectItem value="pastoral">Pastoral Mandıra</SelectItem>
+                    <SelectItem value="esendag">Esendağ</SelectItem>
+                    <SelectItem value="sahin">Şahin Avm</SelectItem>
+                    <SelectItem value="sosyete">Sosyete Manavı</SelectItem>
+                    <SelectItem value="dubai">Dubai Fusion</SelectItem>
+                    <SelectItem value="apart">Apart</SelectItem>
+                    <SelectItem value="ekmekcioglu">Ekmekçioğlu</SelectItem>
+                    <SelectItem value="nutmaster">Nutmaster</SelectItem>
+                    <SelectItem value="sekerci">Şekerci Mustafa</SelectItem>
+                    <SelectItem value="mixflor">Mixflor</SelectItem>
+                    <SelectItem value="bionero">bionero</SelectItem>
+                    <SelectItem value="teakina">teakina</SelectItem>
+                    <SelectItem value="apero">Apero</SelectItem>
+                    <SelectItem value="ekodia">Ekodia</SelectItem>
+                    <SelectItem value="koffo">Koffo</SelectItem>
+                    <SelectItem value="hero">HERO</SelectItem>
+                    <SelectItem value="oymak">Oymak</SelectItem>
+                    <SelectItem value="altintas">Altıntaş</SelectItem>
+                    <SelectItem value="ilica">ILICA</SelectItem>
+                    <SelectItem value="akel">Akel</SelectItem>
+                    <SelectItem value="bereketli">Bereketli</SelectItem>
+                    <SelectItem value="desni">Desni</SelectItem>
+                    <SelectItem value="kozlu">Kozlu Yumurta</SelectItem>
+                    <SelectItem value="tema">Tema</SelectItem>
+                    <SelectItem value="oznur">Öznur Gıda</SelectItem>
+                    <SelectItem value="emin">Emin Karlıdağ</SelectItem>
+                    <SelectItem value="mutlukal">Mutlukal</SelectItem>
+                    <SelectItem value="turk-seker">Türk Şeker</SelectItem>
+                    <SelectItem value="arslanzade">Arslanzade</SelectItem>
+                    <SelectItem value="qclean">Qclean</SelectItem>
+                    <SelectItem value="spon">Spon</SelectItem>
+                    <SelectItem value="tiyum">Tiyum</SelectItem>
+                    <SelectItem value="toruna">Toruna Kasap</SelectItem>
+                    <SelectItem value="nesil">Nesil Gıda</SelectItem>
+                    <SelectItem value="odeyyo">Odeyyo</SelectItem>
+                    <SelectItem value="asya">ASYA</SelectItem>
+                    <SelectItem value="tezcanlar">Tezcanlar</SelectItem>
+                    <SelectItem value="akyudum">Akyudum</SelectItem>
+                    <SelectItem value="cute-cat">Cute cat</SelectItem>
+                    <SelectItem value="berry-life">Berry Life</SelectItem>
+                    <SelectItem value="manga">Manga</SelectItem>
+                    <SelectItem value="renart">Renart</SelectItem>
+                    <SelectItem value="turcel">Turcel Market</SelectItem>
+                    <SelectItem value="la-mere">La Mere Poulard</SelectItem>
+                    <SelectItem value="viora">Viora</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="vatRate">KDV Oranı</Label>
+                <Select value={productData.vatRate} onValueChange={(value) => setProductData(prev => ({ ...prev, vatRate: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seçiniz" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1%</SelectItem>
+                    <SelectItem value="10">10%</SelectItem>
+                    <SelectItem value="20">20%</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Alerjenler */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Alerjenler</CardTitle>
+            <CardDescription>
+              Ürününüzde bulunan alerjenleri seçin veya yeni alerjen ekleyin
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Add new allergen */}
+            <div className="flex gap-2 mb-4">
+              <Input
+                placeholder="Yeni alerjen ekleyin..."
+                value={newAllergen}
+                onChange={(e) => setNewAllergen(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddAllergen())}
+                className="capitalize"
+              />
+              <Button
+                type="button"
+                onClick={handleAddAllergen}
+                disabled={!newAllergen.trim()}
+                size="sm"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Common allergens */}
+            <div className="mb-4">
+              <Label className="text-sm font-medium mb-2 block">Yaygın Alerjenler:</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {commonAllergens.map((allergen) => (
+                  <div key={allergen} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`allergen-${allergen}`}
+                      checked={productData.allergens.includes(allergen)}
+                      onCheckedChange={() => handleAllergenToggle(allergen)}
+                    />
+                    <Label
+                      htmlFor={`allergen-${allergen}`}
+                      className="text-sm cursor-pointer"
+                    >
+                      {allergen}
+                    </Label>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Selected allergens */}
+            {productData.allergens.length > 0 && (
+              <div className="mt-4">
+                <Label>Seçilen Alerjenler:</Label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {productData.allergens.map((allergen) => (
+                    <Badge key={allergen} variant="secondary">
+                      {allergen}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-4 w-4 p-0 ml-1"
+                        onClick={() => handleRemoveAllergen(allergen)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Submit Button */}
         <div className="flex justify-end space-x-4">

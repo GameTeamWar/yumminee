@@ -31,7 +31,7 @@ export default function CheckoutPage() {
     }
 
     // Restoran sahipleri checkout'a erişemez
-    if (userProfile?.role === 'restaurant') {
+    if (userProfile?.role === 'shop') {
       toast.error('Restoran sahipleri müşteri olarak ödeme yapamaz');
       router.push('/restaurants');
       return;
@@ -87,7 +87,7 @@ export default function CheckoutPage() {
           name: item.name,
           price: item.price,
           quantity: item.quantity,
-          selectedOptions: [] // Options will be handled separately
+          options: item.options || []
         })),
         subtotal: getTotal(),
         deliveryFee: 0, // Bu dinamik olmalı
@@ -126,7 +126,7 @@ export default function CheckoutPage() {
       router.push('/orders');
     } catch (error) {
       console.error('Sipariş oluşturulurken hata:', error);
-      toast.error('Sipariş oluşturulurken bir hata oluştu');
+      toast.error(error instanceof Error ? error.message : 'Sipariş oluşturulurken bir hata oluştu');
     } finally {
       setIsLoading(false);
     }

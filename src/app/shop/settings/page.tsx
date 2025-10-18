@@ -39,8 +39,19 @@ export default function SettingsPage() {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [restaurant, setRestaurant] = useState<Shop | null>(null);
   
+  // Aktif sekme durumu
+  const [activeTab, setActiveTab] = useState('general');
+  
   // Debounce için ref
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Aktif sekme'yi localStorage'dan yükle
+  useEffect(() => {
+    const savedTab = localStorage.getItem('shop-settings-active-tab');
+    if (savedTab) {
+      setActiveTab(savedTab);
+    }
+  }, []);
 
   const [restaurantInfo, setRestaurantInfo] = useState({
     name: '',
@@ -260,6 +271,9 @@ export default function SettingsPage() {
       setIsUploadingLogo(true);
       const downloadURL = await uploadRestaurantLogo(restaurant.id, file);
       
+      // Veritabanına kaydet
+      await updateRestaurant(restaurant.id, { image: downloadURL });
+      
       // Restaurant state'ini güncelle
       setRestaurant((prev: Shop | null) => prev ? { ...prev, image: downloadURL } : null);
       
@@ -353,7 +367,10 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="general" className="w-full">
+        <Tabs value={activeTab} onValueChange={(value) => {
+          setActiveTab(value);
+          localStorage.setItem('shop-settings-active-tab', value);
+        }} className="w-full">
           <TabsList className="grid w-full grid-cols-5 bg-white p-1 rounded-xl shadow-sm border border-gray-200">
             <TabsTrigger value="general" className="flex items-center gap-2 data-[state=active]:bg-orange-600 data-[state=active]:text-white">
               <Store className="h-4 w-4" />

@@ -927,6 +927,51 @@ export const deleteOption = async (optionId: string): Promise<void> => {
 
 export const createOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   try {
+    // Validate products, categories and options before creating order
+    for (const item of orderData.items) {
+      // Check if product exists and is available
+      const productDoc = await getDoc(doc(db, 'products', item.productId));
+      if (!productDoc.exists()) {
+        throw new Error(`"${item.name}" ürünü bulunamadı.`);
+      }
+
+      const productData = productDoc.data();
+      if (!productData.isAvailable) {
+        throw new Error(`"${item.name}" ürünü şu anda mevcut değil.`);
+      }
+
+      // Check if categories are active
+      if (productData.categoryIds && productData.categoryIds.length > 0) {
+        for (const categoryId of productData.categoryIds) {
+          const categoryDoc = await getDoc(doc(db, 'categories', categoryId));
+          if (!categoryDoc.exists()) {
+            throw new Error(`"${item.name}" ürünü için kategori bulunamadı.`);
+          }
+
+          const categoryData = categoryDoc.data();
+          if (!categoryData.isActive) {
+            throw new Error(`"${item.name}" ürünü için kategori artık aktif değil.`);
+          }
+        }
+      }
+
+      // Check if options are active
+      if (item.options && item.options.length > 0) {
+        for (const option of item.options) {
+          // Check if option exists and is active
+          const optionDoc = await getDoc(doc(db, 'options', option.id));
+          if (!optionDoc.exists()) {
+            throw new Error(`"${item.name}" ürünü için "${option.name}" opsiyonu bulunamadı.`);
+          }
+
+          const optionData = optionDoc.data();
+          if (!optionData.isActive) {
+            throw new Error(`"${item.name}" ürünü için "${option.name}" opsiyonu artık aktif değil.`);
+          }
+        }
+      }
+    }
+
     const orderId = generateId(12);
     const order: Order = {
       id: orderId,
@@ -1689,13 +1734,37 @@ export const checkPhoneExistsForRole = checkPhoneExists;
 
 // Complex operations aliases
 export const deleteCategoryAndUpdateProducts = async (userId: string, categoryId: string) => {
-  // Get all products in this category
-  const productsQuery = query(collection(db, 'products'), where('categoryId', '==', categoryId));
-  const querySnapshot = await getDocs(productsQuery);
+  // Get the category to find its customId
+  const categoryDoc = await getDoc(doc(db, 'categories', categoryId));
+  if (!categoryDoc.exists()) {
+    throw new Error('Category not found');
+  }
+  const categoryData = categoryDoc.data();
+  const categoryCustomId = categoryData.customId;
+
+  // Find all products that use this category
+  const productsQuery = query(
+    collection(db, 'products'),
+    where('restaurantId', '==', userId),
+    where('categoryIds', 'array-contains', categoryCustomId)
+  );
+
+  const productsSnapshot = await getDocs(productsQuery);
 
   const batch = writeBatch(db);
-  querySnapshot.docs.forEach((doc) => {
-    batch.update(doc.ref, { categoryId: null, updatedAt: serverTimestamp() });
+  // Update each product to remove the category
+  productsSnapshot.forEach((productDoc) => {
+    const productData = productDoc.data();
+    const updatedCategoryIds = productData.categoryIds.filter((id: string) => id !== categoryCustomId);
+    const updatedCategoryNames = productData.categoryNames.filter((_: string, index: number) =>
+      productData.categoryIds[index] !== categoryCustomId
+    );
+
+    batch.update(productDoc.ref, {
+      categoryIds: updatedCategoryIds,
+      categoryNames: updatedCategoryNames,
+      updatedAt: serverTimestamp()
+    });
   });
 
   // Soft delete the category
@@ -1708,12 +1777,47 @@ export const deleteCategoryAndUpdateProducts = async (userId: string, categoryId
 };
 
 export const deleteOptionAndUpdateProducts = async (userId: string, optionId: string) => {
-  // This is complex - would need to update all products that reference this option
-  // For now, just soft delete the option
-  await updateDoc(doc(db, 'options', optionId), {
+  const batch = writeBatch(db);
+
+  // Get the option to find its customId
+  const optionDoc = await getDoc(doc(db, 'options', optionId));
+  if (!optionDoc.exists()) {
+    throw new Error('Option not found');
+  }
+  const optionData = optionDoc.data();
+  const optionCustomId = optionData.customId;
+
+  // Find all products that use this option
+  const productsQuery = query(
+    collection(db, 'products'),
+    where('restaurantId', '==', userId),
+    where('optionIds', 'array-contains', optionCustomId)
+  );
+
+  const productsSnapshot = await getDocs(productsQuery);
+
+  // Update each product to remove the option
+  productsSnapshot.forEach((productDoc) => {
+    const productData = productDoc.data();
+    const updatedOptionIds = productData.optionIds.filter((id: string) => id !== optionCustomId);
+    const updatedOptionNames = productData.optionNames.filter((_: string, index: number) =>
+      productData.optionIds[index] !== optionCustomId
+    );
+
+    batch.update(productDoc.ref, {
+      optionIds: updatedOptionIds,
+      optionNames: updatedOptionNames,
+      updatedAt: serverTimestamp()
+    });
+  });
+
+  // Soft delete the option
+  batch.update(doc(db, 'options', optionId), {
     isActive: false,
     updatedAt: serverTimestamp()
   });
+
+  await batch.commit();
 };
 
 // Additional aliases for missing functions

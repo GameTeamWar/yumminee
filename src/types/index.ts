@@ -105,6 +105,7 @@ export interface Product {
   name: string;
   description: string;
   price: number;
+  originalPrice?: number; // Üstü çizili fiyat
   discountPrice?: number;
   imageUrl?: string;
   category: string;

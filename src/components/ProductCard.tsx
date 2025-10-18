@@ -17,6 +17,7 @@ interface Product {
   name: string;
   description: string;
   price: number;
+  originalPrice?: number;
   image: string;
   options?: ProductOption[];
 }
@@ -75,7 +76,12 @@ const ProductCard = ({ product, restaurantId }: ProductCardProps) => {
             <h3 className="font-semibold mb-1">{product.name}</h3>
             <p className="text-sm text-gray-600 mb-2 line-clamp-2">{product.description}</p>
             <div className="mt-auto">
-              <span className="font-medium">{product.price.toFixed(2)} TL</span>
+              <div className="flex items-center gap-2">
+                {product.originalPrice && product.originalPrice > product.price && (
+                  <span className="text-sm text-gray-500 line-through">{product.originalPrice.toFixed(2)} TL</span>
+                )}
+                <span className="font-medium">{product.price.toFixed(2)} TL</span>
+              </div>
               {product.options && product.options.length > 0 && (
                 <span className="text-xs text-gray-500 ml-1">+ seçenekler</span>
               )}
@@ -155,7 +161,12 @@ const ProductCard = ({ product, restaurantId }: ProductCardProps) => {
           <DialogFooter className="flex-col sm:flex-col gap-2">
             <div className="w-full flex justify-between items-center">
               <span className="font-medium">Toplam:</span>
-              <span className="font-bold">{calculateTotalPrice().toFixed(2)} TL</span>
+              <div className="flex items-center gap-2">
+                {product.originalPrice && product.originalPrice > product.price && (
+                  <span className="text-sm text-gray-500 line-through">{(product.originalPrice * quantity).toFixed(2)} TL</span>
+                )}
+                <span className="font-bold">{calculateTotalPrice().toFixed(2)} TL</span>
+              </div>
             </div>
             
             <Button className="w-full" onClick={handleAddToCart}>
