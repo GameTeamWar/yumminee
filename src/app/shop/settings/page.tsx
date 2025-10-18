@@ -26,6 +26,8 @@ import { getRestaurantByOwnerId, updateRestaurant, uploadRestaurantLogo, Shop, d
 import { db } from '@/lib/firebase/config';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { toast } from 'sonner';
+import WorkingHoursSettings from '@/components/restaurant/WorkingHoursSettings';
+import { WorkingHours } from '@/lib/utils/restaurantHours';
 
 export default function SettingsPage() {
   const { user, userProfile, loading } = useAuth();
@@ -51,7 +53,7 @@ export default function SettingsPage() {
     minimumOrderAmount: 25
   });
 
-  const [workingHours, setWorkingHours] = useState<{[key: string]: { open: string; close: string; isClosed: boolean }}>({
+  const [workingHours, setWorkingHours] = useState<WorkingHours>({
     monday: { open: '09:00', close: '22:00', isClosed: false },
     tuesday: { open: '09:00', close: '22:00', isClosed: false },
     wednesday: { open: '09:00', close: '22:00', isClosed: false },
@@ -136,12 +138,12 @@ export default function SettingsPage() {
 
           // Çalışma saatlerini güncelle
           if (restaurantData.openingHours) {
-            setWorkingHours(restaurantData.openingHours);
+            setWorkingHours(restaurantData.openingHours as unknown as WorkingHours);
           }
 
           // Restaurant isOpen durumunu çalışma saatlerine göre ayarla
           const shouldBeOpen = restaurantData.openingHours 
-            ? calculateRestaurantOpenStatus(restaurantData.openingHours)
+            ? calculateRestaurantOpenStatus(restaurantData.openingHours as unknown as WorkingHours)
             : true; // Varsayılan olarak açık
 
           setRestaurant({ ...restaurantData, isOpen: shouldBeOpen });
@@ -162,27 +164,25 @@ export default function SettingsPage() {
     if (!restaurant?.id) return;
 
     const restaurantRef = doc(db, 'shops', restaurant.id);
-    const unsubscribe = onSnapshot(restaurantRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        if (data.openingHours) {
-          console.log('Settings: Çalışma saatleri güncellendi:', data.openingHours);
-          setWorkingHours(data.openingHours);
-          
-          // Restaurant durumunu da güncelle
-          const shouldBeOpen = calculateRestaurantOpenStatus(data.openingHours);
-          setRestaurant(prev => prev ? { ...prev, isOpen: shouldBeOpen, openingHours: data.openingHours } : null);
-        }
-      }
-    }, (error) => {
-      console.error('Settings: Çalışma saatleri dinlenirken hata:', error);
-    });
-
-    return () => unsubscribe();
+        const unsubscribe = onSnapshot(restaurantRef, (doc) => {
+          if (doc.exists()) {
+            const data = doc.data();
+            if (data.openingHours) {
+              console.log('Settings: Çalışma saatleri güncellendi:', data.openingHours);
+              setWorkingHours(data.openingHours as unknown as WorkingHours);
+              
+              // Restaurant durumunu da güncelle
+              const shouldBeOpen = calculateRestaurantOpenStatus(data.openingHours as unknown as WorkingHours);
+              setRestaurant(prev => prev ? { ...prev, isOpen: shouldBeOpen, openingHours: data.openingHours } : null);
+            }
+          }
+        }, (error) => {
+          console.error('Settings: Çalışma saatleri dinlenirken hata:', error);
+        });    return () => unsubscribe();
   }, [restaurant?.id]);
 
   // Restoran açık/kapalı durumunu çalışma saatlerine göre hesapla
-  const calculateRestaurantOpenStatus = (hours: typeof workingHours): boolean => {
+  const calculateRestaurantOpenStatus = (hours: WorkingHours): boolean => {
     // En az bir gün açık ise restoran açık kabul edilir
     return Object.values(hours).some(day => !day.isClosed);
   };
@@ -225,7 +225,7 @@ export default function SettingsPage() {
         deliveryTime: restaurantInfo.deliveryTime,
         minimumOrderAmount: restaurantInfo.minimumOrderAmount,
         paymentMethods: paymentMethods,
-        openingHours: workingHours,
+        openingHours: workingHours as any,
         isOpen: calculateRestaurantOpenStatus(workingHours)
         // updatedAt Firebase tarafından otomatik olarak eklenecek
       };
@@ -632,112 +632,32 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="hours" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Clock className="h-6 w-6 mr-3 text-orange-600" />
-                Çalışma Saatleri
-              </CardTitle>
-              <CardDescription>
-                Restoranınızın çalışma saatlerini ayarlayın
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {dayOrder.map((day) => {
-                  const hours = workingHours[day];
-                  return (
-                    <div key={day} className="space-y-3 p-4 border border-gray-200 rounded-lg bg-gray-50">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium text-gray-700">
-                          {dayNames[day as keyof typeof dayNames]}
-                        </Label>
-                        <Switch
-                          checked={!hours.isClosed}
-                          onCheckedChange={(checked) => {
-                            const newHours = { ...workingHours };
-                            
-                            if (checked) {
-                              // Gün açılıyor - kaydedilmiş saatleri geri yükle
-                              newHours[day] = { 
-                                ...savedHours[day], 
-                                isClosed: false 
-                              };
-                            } else {
-                              // Gün kapanıyor - saatleri kaydet ve kapat
-                              setSavedHours(prev => ({
-                                ...prev,
-                                [day]: { open: hours.open, close: hours.close }
-                              }));
-                              newHours[day] = { 
-                                ...hours, 
-                                isClosed: true 
-                              };
-                            }
-                            
-                            updateWorkingHours(newHours);
-                            setTimeout(autoSave, 100);
-                          }}
-                          className="data-[state=checked]:bg-orange-500"
-                        />
-                      </div>
-                      {!hours.isClosed && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label htmlFor={`${day}-open`} className="text-xs text-gray-600">Açılış</Label>
-                            <Input
-                              id={`${day}-open`}
-                              type="time"
-                              value={hours.open}
-                              onChange={(e) => {
-                                const newHours = {
-                                  ...workingHours,
-                                  [day]: { ...workingHours[day], open: e.target.value }
-                                };
-                                updateWorkingHours(newHours);
-                              }}
-                              onBlur={autoSave}
-                              className="h-8 text-xs"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor={`${day}-close`} className="text-xs text-gray-600">Kapanış</Label>
-                            <Input
-                              id={`${day}-close`}
-                              type="time"
-                              value={hours.close}
-                              onChange={(e) => {
-                                const newHours = {
-                                  ...workingHours,
-                                  [day]: { ...workingHours[day], close: e.target.value }
-                                };
-                                updateWorkingHours(newHours);
-                              }}
-                              onBlur={autoSave}
-                              className="h-8 text-xs"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      {hours.isClosed && (
-                        <p className="text-xs text-gray-500 italic">Kapalı</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="mt-8 p-4 bg-orange-50 rounded-lg border border-orange-200">
-                <p className="text-sm text-orange-800">
-                  <strong>🕐 İpucu:</strong> Çalışma saatleriniz müşterileriniz tarafından görülecektir ve sipariş kabulü bu saatlere göre sınırlanacaktır.
-                  {Object.values(workingHours).every(day => day.isClosed) && (
-                    <span className="block mt-2 text-red-600 font-medium">
-                      ⚠️ Tüm günler kapalı olduğu için restoranınız kapalı olarak işaretlenecektir.
-                    </span>
-                  )}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <WorkingHoursSettings
+            restaurantId={restaurant?.id || ''}
+            initialHours={workingHours as WorkingHours}
+            onUpdate={() => {
+              // Settings sayfasını yeniden yükle veya state'i güncelle
+              if (restaurant?.id) {
+                const restaurantRef = doc(db, 'shops', restaurant.id);
+                const unsubscribe = onSnapshot(restaurantRef, (doc) => {
+                  if (doc.exists()) {
+                    const data = doc.data();
+                    if (data.openingHours) {
+                      setWorkingHours(data.openingHours as unknown as WorkingHours);
+                      // Restaurant durumunu da güncelle
+                      const shouldBeOpen = calculateRestaurantOpenStatus(data.openingHours as unknown as WorkingHours);
+                      setRestaurant(prev => prev ? { ...prev, isOpen: shouldBeOpen, openingHours: data.openingHours } : null);
+                    }
+                  }
+                }, (error) => {
+                  console.error('WorkingHoursSettings güncelleme sonrası hata:', error);
+                });
+
+                // Cleanup
+                setTimeout(() => unsubscribe(), 1000);
+              }
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="payment" className="space-y-6">

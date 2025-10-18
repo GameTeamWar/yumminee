@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { Restaurant } from '@/types';
-import { isRestaurantOpenBasedOnHours, getNextOpeningTime } from '@/lib/utils/restaurantHours';
+import { isRestaurantOpenBasedOnHours } from '@/lib/utils/restaurantHours';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 
 /**
  * Restoranın çalışma saatlerine göre otomatik açık/kapalı durumunu yöneten hook
- * openingHours'a göre otomatik açar/kapar
+ * SADECE çalışma saatlerine göre otomatik açar, manuel kapanışları korur
  */
 export function useAutoRestaurantStatus(restaurant: Restaurant | null) {
   const [isUpdating, setIsUpdating] = useState(false);
@@ -18,45 +18,41 @@ export function useAutoRestaurantStatus(restaurant: Restaurant | null) {
 
     const checkAndUpdateStatus = async () => {
       try {
-        const shouldBeOpen = isRestaurantOpenBasedOnHours(restaurant.openingHours!);
-        console.log(`Hook: Restoran şu an açık: ${restaurant.isOpen}, saatlere göre açık olmalı: ${shouldBeOpen}`);
-
-        // Açma: Eğer saatlere göre açık olmalı ama şu an kapalıysa aç
-        if (shouldBeOpen && !restaurant.isOpen) {
-          setIsUpdating(true);
-
-          const restaurantRef = doc(db, 'shops', restaurant.id);
-          await updateDoc(restaurantRef, {
-            isOpen: true,
-            updatedAt: new Date()
-          });
-
-          console.log(`Restoran ${restaurant.name} saatlere göre otomatik olarak açıldı`);
+        const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
+        const todayHours = restaurant.openingHours![today as keyof typeof restaurant.openingHours];
+        
+        // ⚠️ KRİTİK: Eğer bugün kapatılmışsa (manuel veya ayarlardan), HİÇBİR ŞEY YAPMA
+        // Bu hook SADECE geçici kapatmaları açar, kalıcı kapatmalara DOKUNMAZ
+        if (todayHours?.isClosed) {
+          console.log(`🔒 Hook: Bugün kapalı (manuel/ayarlardan) - Otomatik açılmayacak`);
+          return;
         }
 
-        // Kapanış: Eğer saatlere göre kapalı olmalı ama şu an açıksa kapat
-        if (!shouldBeOpen && restaurant.isOpen) {
-          setIsUpdating(true);
+        // Çalışma saatlerine göre açık olup olmadığını kontrol et
+        const shouldBeOpenBySchedule = isRestaurantOpenBasedOnHours(restaurant.openingHours!);
+        
+        console.log(`⏰ Hook: Çalışma saatleri kontrolü - Açık olmalı: ${shouldBeOpenBySchedule}`);
 
-          const restaurantRef = doc(db, 'shops', restaurant.id);
-          await updateDoc(restaurantRef, {
-            isOpen: false,
-            updatedAt: new Date()
-          });
+        // Bu hook SADECE kontrol eder, hiçbir değişiklik yapmaz
+        // Değişiklikler sadece şu yollarla yapılmalı:
+        // 1. Sidebar'dan manuel açma/kapama (RestaurantSidebar.tsx)
+        // 2. Ayarlardan gün açma/kapama (restaurantDayManagement.ts)
+        // 3. Geçici kapatma timer'ları
 
-          console.log(`Restoran ${restaurant.name} saatlere göre otomatik olarak kapatıldı`);
+        if (shouldBeOpenBySchedule && !todayHours.isClosed) {
+          console.log(`✅ Hook: Restoran şu an açık durumda (doğru)`);
+        } else if (!shouldBeOpenBySchedule && !todayHours.isClosed) {
+          console.log(`⏰ Hook: Çalışma saatleri dışında ama açık (normal)`);
         }
       } catch (error) {
-        console.error('Restoran durumu güncellenirken hata:', error);
-      } finally {
-        setIsUpdating(false);
+        console.error('❌ Hook: Restoran durumu kontrolünde hata:', error);
       }
     };
 
     // İlk kontrol - hemen çalış
     checkAndUpdateStatus();
 
-    // Her dakika kontrol et - kapanış saatinde kapatmak için
+    // Her dakika kontrol et - sadece monitoring için
     const interval = setInterval(checkAndUpdateStatus, 60000); // 1 dakika
 
     return () => clearInterval(interval);
@@ -74,37 +70,36 @@ export function getRestaurantStatus(restaurant: Restaurant): {
   statusText: string;
   nextOpeningTime?: Date;
 } {
-  // Eğer manuel olarak kapalıysa
-  if (restaurant.isOpen === false) {
+  if (!restaurant.openingHours) {
     return {
-      isOpen: false,
-      statusText: 'Kapalı'
+      isOpen: true,
+      statusText: 'Açık'
     };
   }
 
-  // Çalışma saatleri varsa kontrol et
-  if (restaurant.workingHours) {
-    const isOpenBasedOnHours = isRestaurantOpenBasedOnHours(restaurant.workingHours);
+  const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
+  const todayHours = restaurant.openingHours[today as keyof typeof restaurant.openingHours];
 
-    if (isOpenBasedOnHours) {
-      return {
-        isOpen: true,
-        statusText: 'Açık'
-      };
-    } else {
-      // Kapalıysa bir sonraki açılış saatini hesapla
-      const nextOpening = getNextOpeningTime(restaurant.workingHours);
-      return {
-        isOpen: false,
-        statusText: 'Kapalı',
-        nextOpeningTime: nextOpening || undefined
-      };
-    }
+  // Eğer bugün manuel olarak kapatılmışsa
+  if (todayHours?.isClosed) {
+    return {
+      isOpen: false,
+      statusText: 'Manuel olarak kapatıldı'
+    };
   }
 
-  // Çalışma saati bilgisi yoksa varsayılan olarak açık kabul et
-  return {
-    isOpen: true,
-    statusText: 'Açık'
-  };
+  // Çalışma saatlerine göre kontrol et
+  const isOpenBySchedule = isRestaurantOpenBasedOnHours(restaurant.openingHours);
+
+  if (isOpenBySchedule) {
+    return {
+      isOpen: true,
+      statusText: 'Açık'
+    };
+  } else {
+    return {
+      isOpen: false,
+      statusText: 'Çalışma saatleri dışında'
+    };
+  }
 }

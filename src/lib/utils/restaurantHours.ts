@@ -1,169 +1,108 @@
-import { WorkingHours, Restaurant } from '@/types';
+// src/lib/utils/restaurantHours.ts
 
 /**
- * Çalışma saatlerine göre restoranın şu anda açık olup olmadığını kontrol eder
- * @param workingHours Restoranın çalışma saatleri
- * @returns boolean - Restoran açık mı?
+ * Restoranın çalışma saatleri ile ilgili yardımcı fonksiyonlar
+ */
+
+export interface WorkingHours {
+  monday: { open: string; close: string; isClosed: boolean };
+  tuesday: { open: string; close: string; isClosed: boolean };
+  wednesday: { open: string; close: string; isClosed: boolean };
+  thursday: { open: string; close: string; isClosed: boolean };
+  friday: { open: string; close: string; isClosed: boolean };
+  saturday: { open: string; close: string; isClosed: boolean };
+  sunday: { open: string; close: string; isClosed: boolean };
+}
+
+/**
+ * Verilen saatin HH:mm formatında olup olmadığını kontrol eder
+ */
+function isValidTimeFormat(time: string): boolean {
+  const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+  return timeRegex.test(time);
+}
+
+/**
+ * Saat string'ini dakikaya çevirir (örn: "14:30" -> 870)
+ */
+function timeToMinutes(time: string): number {
+  if (!isValidTimeFormat(time)) {
+    console.warn(`Geçersiz saat formatı: ${time}`);
+    return 0;
+  }
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+/**
+ * Restoranın ŞU ANDA çalışma saatlerine göre açık olup olmadığını kontrol eder
+ * Manuel kapanışları DIKKATE ALMAZ, sadece çalışma saatlerine bakar
  */
 export function isRestaurantOpenBasedOnHours(workingHours: WorkingHours): boolean {
   const now = new Date();
-  const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  const currentTime = now.getHours() * 60 + now.getMinutes(); // Dakika cinsinden
+  const currentDay = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(now).toLowerCase();
+  const todayHours = workingHours[currentDay as keyof WorkingHours];
 
-  // Gün isimlerini diziye çevir
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const todayKey = days[currentDay] as keyof WorkingHours;
-
-  const todayHours = workingHours[todayKey];
-
-  // Eğer bugün kapalıysa veya veri yoksa false döndür
-  if (!todayHours || todayHours.isClosed) {
+  // Eğer bugün için çalışma saati tanımlanmamışsa, kapalı kabul et
+  if (!todayHours) {
     return false;
   }
 
-  // Açılış ve kapanış saatlerini dakika cinsine çevir
-  const [openHour, openMinute] = todayHours.open.split(':').map(Number);
-  const [closeHour, closeMinute] = todayHours.close.split(':').map(Number);
-
-  const openTime = openHour * 60 + openMinute;
-  const closeTime = closeHour * 60 + closeMinute;
-
-  // Eğer kapanış saati açılış saatinden küçükse (örn: 23:00 - 02:00), gece yarısını geçtiği varsayılır
-  if (closeTime < openTime) {
-    // Gece yarısını geçen durum (örn: 23:00 - 02:00)
-    return currentTime >= openTime || currentTime < closeTime;
-  } else {
-    // Normal durum (örn: 09:00 - 22:00)
-    return currentTime >= openTime && currentTime < closeTime;
-  }
-}
-
-/**
- * Bir restoranın çalışma saatlerini formatlar
- * @param workingHours Restoranın çalışma saatleri
- * @returns string - Formatlanmış çalışma saatleri
- */
-export function formatWorkingHours(workingHours: WorkingHours): string {
-  const now = new Date();
-  const currentDay = now.getDay();
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const todayKey = days[currentDay] as keyof WorkingHours;
-
-  const todayHours = workingHours[todayKey];
-
-  if (!todayHours || todayHours.isClosed) {
-    return 'Bugün Kapalı';
+  // Eğer bugün kapalıysa (isClosed = true), kapalı döndür
+  // NOT: Bu manuel kapanışı da içerir, ama bu fonksiyon sadece çalışma saatlerine bakmalı
+  // Manuel kapanış kontrolü çağıran tarafta yapılmalı
+  if (todayHours.isClosed) {
+    return false;
   }
 
-  return `${todayHours.open} - ${todayHours.close}`;
+  // Açılış ve kapanış saatlerini kontrol et
+  if (!todayHours.open || !todayHours.close) {
+    return false;
+  }
+
+  // Şu anki saati dakikaya çevir
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const openMinutes = timeToMinutes(todayHours.open);
+  const closeMinutes = timeToMinutes(todayHours.close);
+
+  // Gece yarısını geçen çalışma saatleri için özel durum
+  if (closeMinutes < openMinutes) {
+    // Örneğin: 22:00 - 02:00
+    return currentMinutes >= openMinutes || currentMinutes < closeMinutes;
+  }
+
+  // Normal çalışma saatleri
+  return currentMinutes >= openMinutes && currentMinutes < closeMinutes;
 }
 
 /**
- * Tüm haftanın çalışma saatlerini formatlar
- * @param workingHours Restoranın çalışma saatleri
- * @returns string - Tüm haftanın formatlanmış çalışma saatleri
- */
-export function formatAllWorkingHours(workingHours: WorkingHours): string {
-  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-  const dayNames = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
-
-  const formattedHours: string[] = [];
-
-  days.forEach((dayKey, index) => {
-    const dayHours = workingHours[dayKey as keyof WorkingHours];
-    const dayName = dayNames[index];
-
-    if (!dayHours || dayHours.isClosed) {
-      formattedHours.push(`${dayName}: Kapalı`);
-    } else {
-      formattedHours.push(`${dayName}: ${dayHours.open} - ${dayHours.close}`);
-    }
-  });
-
-  return formattedHours.join('\n');
-}
-
-/**
- * Restoranın bir sonraki açılış saatini hesaplar
- * @param workingHours Restoranın çalışma saatleri
- * @returns Date | null - Bir sonraki açılış saati, null ise hiç açılmayacak
+ * Bir sonraki açılış zamanını hesaplar
  */
 export function getNextOpeningTime(workingHours: WorkingHours): Date | null {
   const now = new Date();
-  const currentDay = now.getDay();
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-  // Önce bugünkü günü kontrol et
-  const todayKey = days[currentDay] as keyof WorkingHours;
-  const todayHours = workingHours[todayKey];
-
-  if (todayHours && !todayHours.isClosed) {
-    const [openHour, openMinute] = todayHours.open.split(':').map(Number);
-    const openingTime = new Date(now);
-    openingTime.setHours(openHour, openMinute, 0, 0);
-
-    if (openingTime > now) {
-      return openingTime;
-    }
-  }
-
-  // Bugünden sonraki 7 günü kontrol et
-  for (let i = 1; i <= 7; i++) {
-    const checkDay = (currentDay + i) % 7;
-    const checkDayKey = days[checkDay] as keyof WorkingHours;
-    const checkDayHours = workingHours[checkDayKey];
-
-    if (checkDayHours && !checkDayHours.isClosed) {
-      const [openHour, openMinute] = checkDayHours.open.split(':').map(Number);
-      const openingTime = new Date(now);
-      openingTime.setDate(now.getDate() + i);
-      openingTime.setHours(openHour, openMinute, 0, 0);
-      return openingTime;
-    }
-  }
-
-  return null; // Hiç açılmayacak
-}
-
-/**
- * Restoranın şu anda açık olup olmadığını kontrol eder
- * Hem manuel durumu hem de çalışma saatlerini dikkate alır
- */
-export function getRestaurantStatus(restaurant: Restaurant): {
-  isOpen: boolean;
-  statusText: string;
-  nextOpeningTime?: Date;
-} {
-  // Eğer manuel olarak açık ise, saatlere bakmadan açık
-  if (restaurant.isOpen === true) {
-    return {
-      isOpen: true,
-      statusText: 'Açık'
-    };
-  }
-
-  // Eğer manuel olarak kapalıysa, saatlere bak
-  if (restaurant.isOpen === false && restaurant.openingHours) {
-    const isOpenBasedOnHours = isRestaurantOpenBasedOnHours(restaurant.openingHours);
+  const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  
+  // Bugünden başlayarak 7 gün kontrol et
+  for (let i = 0; i < 7; i++) {
+    const checkDate = new Date(now);
+    checkDate.setDate(checkDate.getDate() + i);
     
-    if (isOpenBasedOnHours) {
-      // Manuel kapalı ama saatlere göre açık olmalı, açık göster
-      return {
-        isOpen: true,
-        statusText: 'Açık'
-      };
-    } else {
-      // Manuel kapalı ve saatlere göre de kapalı
-      return {
-        isOpen: false,
-        statusText: 'Kapalı'
-      };
+    const dayName = daysOfWeek[checkDate.getDay()];
+    const dayHours = workingHours[dayName as keyof WorkingHours];
+    
+    if (!dayHours || dayHours.isClosed) {
+      continue;
+    }
+    
+    const [openHour, openMinute] = dayHours.open.split(':').map(Number);
+    checkDate.setHours(openHour, openMinute, 0, 0);
+    
+    // Eğer bu zaman gelecekteyse, bu açılış zamanını döndür
+    if (checkDate > now) {
+      return checkDate;
     }
   }
 
-  // Çalışma saati bilgisi yoksa varsayılan olarak açık kabul et
-  return {
-    isOpen: true,
-    statusText: 'Açık'
-  };
+  // Eğer 7 gün içinde hiçbir açılış bulunmadıysa null döndür
+  return null;
 }
