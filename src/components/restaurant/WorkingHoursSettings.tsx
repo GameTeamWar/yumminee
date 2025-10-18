@@ -17,6 +17,14 @@ import {
   setWeekendHours
 } from '@/lib/utils/restaurantDayManagement';
 import { Clock, Save, Copy } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface WorkingHoursSettingsProps {
   restaurantId: string;
@@ -48,6 +56,7 @@ export default function WorkingHoursSettings({
   const [hours, setHours] = useState<WorkingHours>(initialHours);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [showApplyModal, setShowApplyModal] = useState(false);
 
   // Props güncellendiğinde state'i güncelle
   useEffect(() => {
@@ -147,12 +156,17 @@ export default function WorkingHoursSettings({
       return;
     }
 
-    if (!confirm('Pazartesi saatlerini tüm günlere uygulamak istediğinize emin misiniz?')) {
-      return;
-    }
+    setShowApplyModal(true);
+  };
+
+  // Tüm günlere aynı saatleri uygula (modal onayından sonra)
+  const confirmApplyToAllDays = async () => {
+    const firstDay = hours.monday;
 
     try {
       setIsSaving(true);
+      setShowApplyModal(false);
+
       await setUniformHoursForAllDays(
         restaurantId,
         firstDay.open,
@@ -283,12 +297,40 @@ export default function WorkingHoursSettings({
             <ul className="text-sm text-blue-800 space-y-1">
               <li>• Bir günü kapalı işaretlerseniz, o gün boyunca restoran kapalı kalır</li>
               <li>• Açık günlerde, çalışma saatlerine göre otomatik açılıp kapanırsınız</li>
-              <li>• Sidebar'dan geçici kapatma yapabilirsiniz (5-30 dakika)</li>
+              <li>• Sidebar'dan geçici kapatma yapabilirsiniz (5-120 dakika arasında)</li>
               <li>• Ayarlardan kapatılan günler kalıcıdır, manuel açmanız gerekir</li>
+               <li>• Bir Sorun Yaşama Durumunda Destek Ekibimizden Destek Alabilirsiniz</li>
             </ul>
           </div>
         </div>
       </CardContent>
+
+      {/* Pazartesi Saatlerini Tüm Günlere Uygula Modal */}
+      <Dialog open={showApplyModal} onOpenChange={setShowApplyModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tüm Günlere Uygula</DialogTitle>
+            <DialogDescription>
+              Pazartesi günü çalışma saatlerini ({hours.monday.open} - {hours.monday.close}) tüm günlere uygulamak istediğinizden emin misiniz?
+            </DialogDescription>
+          </DialogHeader>
+
+         
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowApplyModal(false)}>
+              İptal
+            </Button>
+            <Button
+              onClick={confirmApplyToAllDays}
+              disabled={isSaving}
+              className="bg-orange-500 hover:bg-orange-600"
+            >
+              {isSaving ? 'Uygulanıyor...' : 'Tüm Günlere Uygula'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

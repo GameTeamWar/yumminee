@@ -132,8 +132,26 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
           <h3 className="font-bold text-lg truncate mb-2">{restaurant.name}</h3>
           
           {/* Kategoriler */}
-          <div className="text-sm text-gray-500 mb-4 truncate">
-            {restaurant.cuisine ? restaurant.cuisine.slice(0, 2).join(' • ') : restaurant.categories.slice(0, 2).join(' • ')}
+          <div className="text-sm text-gray-500 mb-4">
+            {restaurant.cuisine && restaurant.cuisine.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {restaurant.cuisine.map((cuisine, index) => (
+                  <span key={index} className="inline-block">
+                    {cuisine}
+                    {index < restaurant.cuisine.length - 1 && <span className="mx-1">•</span>}
+                  </span>
+                ))}
+              </div>
+            ) : restaurant.categories && restaurant.categories.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {restaurant.categories.map((category, index) => (
+                  <span key={index} className="inline-block">
+                    {category}
+                    {index < restaurant.categories.length - 1 && <span className="mx-1">•</span>}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           {/* Divider */}
@@ -154,14 +172,6 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
                   {restaurant.openingHours ? renderWorkingHours(restaurant.openingHours) : '08:00-22:00'}
                 </span>
               )}
-
-              {/* Çalışma Saatleri */}
-              <div className="flex items-center space-x-1.5">
-                <div className={`w-2 h-2 rounded-full ${isOpen ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span className={`text-xs font-medium ${isOpen ? 'text-green-600' : 'text-red-600'}`}>
-                  {restaurant.openingHours ? renderWorkingHours(restaurant.openingHours) : '08:00-22:00'}
-                </span>
-              </div>
             </div>
 
             {/* Minimum Sipariş */}

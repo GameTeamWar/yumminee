@@ -201,3 +201,45 @@ export function getRestaurantStatus(restaurant: { openingHours?: WorkingHours; i
     statusText: 'Kapalı'
   };
 }
+
+/**
+ * Çalışma saatlerini kısa formatta döndürür (örn: "09:00-22:00")
+ */
+export function formatWorkingHours(workingHours: WorkingHours): string {
+  const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
+  const todayHours = workingHours[today as keyof WorkingHours];
+
+  if (!todayHours || todayHours.isClosed) {
+    return 'Kapalı';
+  }
+
+  return `${todayHours.open}-${todayHours.close}`;
+}
+
+/**
+ * Tüm çalışma saatlerini detaylı formatta döndürür
+ */
+export function formatAllWorkingHours(workingHours: WorkingHours): string {
+  const daysTr = {
+    monday: 'Pazartesi',
+    tuesday: 'Salı',
+    wednesday: 'Çarşamba',
+    thursday: 'Perşembe',
+    friday: 'Cuma',
+    saturday: 'Cumartesi',
+    sunday: 'Pazar'
+  };
+
+  const dayOrder: (keyof WorkingHours)[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+  return dayOrder.map(day => {
+    const dayHours = workingHours[day];
+    const dayName = daysTr[day];
+
+    if (dayHours.isClosed) {
+      return `${dayName}: Kapalı`;
+    }
+
+    return `${dayName}: ${dayHours.open}-${dayHours.close}`;
+  }).join('\n');
+}

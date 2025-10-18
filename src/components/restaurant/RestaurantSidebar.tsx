@@ -113,6 +113,7 @@ export default function RestaurantSidebar() {
   const [temporaryCloseTimer, setTemporaryCloseTimer] = useState<NodeJS.Timeout | null>(null);
   const [remainingTime, setRemainingTime] = useState<number>(0);
   const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isCancelTimerModalOpen, setIsCancelTimerModalOpen] = useState(false);
 
   // Otomatik restoran durumu hook'u
   useAutoRestaurantStatus(restaurant);
@@ -429,6 +430,43 @@ export default function RestaurantSidebar() {
     }
   };
 
+  const handleCancelTimer = async () => {
+    try {
+      if (restaurant) {
+        // Timer'ı temizle
+        if (temporaryCloseTimer) {
+          clearTimeout(temporaryCloseTimer);
+          setTemporaryCloseTimer(null);
+        }
+        if (countdownInterval) {
+          clearInterval(countdownInterval);
+          setCountdownInterval(null);
+        }
+
+        // Süreyi sıfırla
+        setRemainingTime(0);
+        localStorage.removeItem(`tempClose_${restaurant.id}`);
+
+        // Restoranı aç
+        const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
+        const updatedHours = { ...restaurant.openingHours };
+        if (updatedHours[today]) {
+          updatedHours[today].isClosed = false;
+        }
+
+        await updateRestaurant(restaurant.id, {
+          openingHours: updatedHours
+        });
+
+        toast.success('Otomatik açılma süresi iptal edildi - restoran açıldı');
+        setIsCancelTimerModalOpen(false);
+      }
+    } catch (error) {
+      console.error('Süre iptal edilirken hata:', error);
+      toast.error('Süre iptal edilirken bir hata oluştu');
+    }
+  };
+
   return (
     <aside className="fixed top-0 left-0 w-64 bg-gray-900 text-white h-screen flex flex-col z-50">
       <div className="p-6 border-b border-gray-800">
@@ -548,7 +586,10 @@ export default function RestaurantSidebar() {
             {getStatusText()}
           </p>
           {remainingTime > 0 && (
-            <div className="mt-2 flex items-center space-x-2">
+            <div 
+              className="mt-2 flex items-center space-x-2 cursor-pointer hover:bg-orange-800/30 p-1 rounded transition-colors"
+              onClick={() => setIsCancelTimerModalOpen(true)}
+            >
               <Clock className="h-3 w-3 text-orange-400" />
               <span className="text-xs text-orange-300 font-medium">
                 Otomatik açılmaya: {formatTime(remainingTime)}
@@ -629,6 +670,38 @@ export default function RestaurantSidebar() {
               className="bg-red-600 hover:bg-red-700"
             >
               Restoranı Kapat
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Süre İptal Modal */}
+      <Dialog open={isCancelTimerModalOpen} onOpenChange={setIsCancelTimerModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Süre İptal Edilsin Mi?</DialogTitle>
+            <DialogDescription>
+              Otomatik açılma süresini iptal etmek istediğinizden emin misiniz? 
+              Restoranınız hemen açılacaktır.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center space-x-2 p-3 bg-orange-50 rounded-lg border border-orange-200">
+            <Clock className="h-4 w-4 text-orange-600" />
+            <span className="text-sm text-orange-800">
+              Kalan süre: {formatTime(remainingTime)}
+            </span>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCancelTimerModalOpen(false)}>
+              Hayır, Devam Et
+            </Button>
+            <Button
+              onClick={handleCancelTimer}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Evet, Süreyi İptal Et
             </Button>
           </DialogFooter>
         </DialogContent>
