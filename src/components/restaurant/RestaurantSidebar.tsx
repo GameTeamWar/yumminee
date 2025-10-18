@@ -112,9 +112,38 @@ export default function RestaurantSidebar() {
   const [selectedCloseOption, setSelectedCloseOption] = useState<string>('');
   const [temporaryCloseTimer, setTemporaryCloseTimer] = useState<NodeJS.Timeout | null>(null);
   const [remainingTime, setRemainingTime] = useState<number>(0);
+  const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Otomatik restoran durumu hook'u
   useAutoRestaurantStatus(restaurant);
+
+  // Kalan süreyi gerçek zamanlı güncelle
+  useEffect(() => {
+    if (remainingTime > 0) {
+      const interval = setInterval(() => {
+        setRemainingTime(prev => {
+          if (prev <= 1) {
+            // Süre doldu, otomatik aç
+            handleAutoOpenRestaurant();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      setCountdownInterval(interval);
+
+      return () => {
+        clearInterval(interval);
+        setCountdownInterval(null);
+      };
+    } else {
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        setCountdownInterval(null);
+      }
+    }
+  }, [remainingTime]);
 
   // Bugünün çalışma saatlerine göre açık olup olmadığını kontrol et
   const isTodayOpenBySchedule = () => {
@@ -130,42 +159,97 @@ export default function RestaurantSidebar() {
     return todayHours?.isClosed || false;
   };
 
+  // Tüm günlerin dönemsel olarak kapatılıp kapatılmadığını kontrol et
+  const isSeasonallyClosed = () => {
+    if (!restaurant?.openingHours) return false;
+    const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    return daysOfWeek.every(day => {
+      const dayHours = restaurant.openingHours![day as keyof typeof restaurant.openingHours];
+      return dayHours?.isClosed || false;
+    });
+  };
+
   // Toggle switch'in durumu: Hem manuel kapanış hem de çalışma saatlerini kontrol et
   const isToggleChecked = () => {
     if (!restaurant) return false;
+    // Eğer dönemsel kapatılmışsa, toggle kapalı olmalı
+    if (isSeasonallyClosed()) return false;
     // Eğer bugün manuel olarak kapatılmışsa, toggle kapalı olmalı
     if (isTodayManuallyClosed()) return false;
     // Eğer çalışma saatlerine göre açıksa ve manuel kapanış yoksa, toggle açık olmalı
     return isTodayOpenBySchedule();
   };
 
+  // Süreyi formatla
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (minutes > 0) {
+      return `${minutes} dk ${remainingSeconds} sn`;
+    } else {
+      return `${remainingSeconds} sn`;
+    }
+  };
+
   // Durum metni
   const getStatusText = () => {
     if (!restaurant) return 'Yükleniyor';
-    
+
+    if (remainingTime > 0) {
+      const minutes = Math.floor(remainingTime / 60);
+      const seconds = remainingTime % 60;
+      if (minutes > 0) {
+        return `${minutes} dk ${seconds} sn sonra açılır`;
+      } else {
+        return `${seconds} sn sonra açılır`;
+      }
+    }
+
+    if (isSeasonallyClosed()) {
+      return 'Dönemsel/tatil sebebiyle kapatıldı';
+    }
+
     if (isTodayManuallyClosed()) {
       return 'Bugün manuel olarak kapatıldı';
     }
-    
+
     if (isTodayOpenBySchedule()) {
       return 'Çalışma saatlerine göre açık';
     }
-    
-    if (remainingTime > 0) {
-      return `${Math.ceil(remainingTime / 60)} dk sonra otomatik açılır`;
-    }
-    
+
     return 'Çalışma saatleri dışında';
   };
 
-  // Component unmount olduğunda timer'ı temizle
+  // Component mount olduğunda localStorage'dan kalan süreyi yükle
+  useEffect(() => {
+    if (restaurant?.id) {
+      const storedEndTime = localStorage.getItem(`tempClose_${restaurant.id}`);
+      if (storedEndTime) {
+        const endTime = parseInt(storedEndTime);
+        const now = Math.floor(Date.now() / 1000);
+        const remaining = endTime - now;
+
+        if (remaining > 0) {
+          setRemainingTime(remaining);
+        } else {
+          // Süre dolmuş, temizle
+          localStorage.removeItem(`tempClose_${restaurant.id}`);
+        }
+      }
+    }
+  }, [restaurant?.id]);
+
+  // Component unmount olduğunda timer'ları temizle
   useEffect(() => {
     return () => {
       if (temporaryCloseTimer) {
         clearTimeout(temporaryCloseTimer);
       }
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
     };
-  }, [temporaryCloseTimer]);
+  }, [temporaryCloseTimer, countdownInterval]);
 
   // Restaurant verilerini real-time olarak yükle
   useEffect(() => {
@@ -218,17 +302,29 @@ export default function RestaurantSidebar() {
         // Kapatma modal'ını aç
         setIsCloseModalOpen(true);
       } else {
-        // Aç - bugünün isClosed = false yap
+        // Aç - eğer dönemsel kapatılmışsa tüm günleri aç, değilse sadece bugünü aç
         const updatedHours = { ...restaurant.openingHours };
-        if (updatedHours[today]) {
-          updatedHours[today].isClosed = false;
+        
+        if (isSeasonallyClosed()) {
+          // Dönemsel kapatılmış, tüm günleri aç
+          const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+          daysOfWeek.forEach(day => {
+            if (updatedHours[day]) {
+              updatedHours[day].isClosed = false;
+            }
+          });
+          toast.success('Dönemsel kapatmadan çıkarıldı - tüm günler açıldı');
+        } else {
+          // Sadece bugünü aç
+          if (updatedHours[today]) {
+            updatedHours[today].isClosed = false;
+          }
+          toast.success('Restoran bugün için açıldı');
         }
         
         await updateRestaurant(restaurant.id, { 
           openingHours: updatedHours 
         });
-        
-        toast.success('Restoran bugün için açıldı');
       }
     } catch (error) {
       console.error('Restoran durumu güncellenirken hata:', error);
@@ -249,17 +345,19 @@ export default function RestaurantSidebar() {
         // Kısa süreli kapatma - sadece bugünü kapat
         const minutes = parseInt(selectedCloseOption.split('-')[1]);
         const totalSeconds = minutes * 60;
+        const endTime = Math.floor(Date.now() / 1000) + totalSeconds;
 
         const updatedHours = { ...restaurant.openingHours };
         if (updatedHours[today]) {
           updatedHours[today].isClosed = true;
         }
-        
-        await updateRestaurant(restaurant.id, { 
-          openingHours: updatedHours 
+
+        await updateRestaurant(restaurant.id, {
+          openingHours: updatedHours
         });
-        
+
         setRemainingTime(totalSeconds);
+        localStorage.setItem(`tempClose_${restaurant.id}`, endTime.toString());
 
         // Otomatik açılma için timer ayarla
         const timer = setTimeout(async () => {
@@ -281,6 +379,22 @@ export default function RestaurantSidebar() {
         });
         
         toast.success('Bugün manuel olarak kapatıldı. Yarın çalışma saatlerinize göre otomatik açılacak.');
+      } else if (selectedCloseOption === 'seasonal-close') {
+        // Dönemsel/tatil kapat: tüm günleri kapat
+        const updatedHours = { ...restaurant.openingHours };
+        const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        
+        daysOfWeek.forEach(day => {
+          if (updatedHours[day]) {
+            updatedHours[day].isClosed = true;
+          }
+        });
+        
+        await updateRestaurant(restaurant.id, { 
+          openingHours: updatedHours 
+        });
+        
+        toast.success('Dönemsel/tatil sebebiyle tüm günler kapatıldı. Açmak için manuel olarak açmanız gerekir.');
       }
 
       setIsCloseModalOpen(false);
@@ -299,13 +413,14 @@ export default function RestaurantSidebar() {
         if (updatedHours[today]) {
           updatedHours[today].isClosed = false;
         }
-        
-        await updateRestaurant(restaurant.id, { 
-          openingHours: updatedHours 
+
+        await updateRestaurant(restaurant.id, {
+          openingHours: updatedHours
         });
-        
+
         setTemporaryCloseTimer(null);
         setRemainingTime(0);
+        localStorage.removeItem(`tempClose_${restaurant.id}`);
         toast.success('Bugün otomatik olarak açıldı');
       }
     } catch (error) {
@@ -406,36 +521,49 @@ export default function RestaurantSidebar() {
       </nav>
 
       <div className="p-4 border-t border-gray-800">
-        <div className="bg-gray-800 rounded-lg p-3">
+        <div className={cn(
+          "rounded-lg p-3",
+          remainingTime > 0 ? "bg-orange-900/50 border border-orange-700" : "bg-gray-800"
+        )}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-2">
               <div className={cn(
                 "w-2 h-2 rounded-full animate-pulse",
+                remainingTime > 0 ? "bg-orange-500" :
                 restaurant && isToggleChecked() ? "bg-green-500" : "bg-red-500"
               )}></div>
               <span className="text-sm font-medium">
-                {restaurant ? (isToggleChecked() ? 'Hizmet Veriyor' : 'Kapalı') : 'Yükleniyor...'}
+                {remainingTime > 0 ? 'Geçici Kapalı' :
+                 restaurant ? (isToggleChecked() ? 'Hizmet Veriyor' : 'Kapalı') : 'Yükleniyor...'}
               </span>
             </div>
             <Switch
               checked={isToggleChecked()}
               onCheckedChange={handleToggleRestaurant}
-              disabled={!restaurant}
+              disabled={!restaurant || remainingTime > 0}
               className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
             />
           </div>
           <p className="text-xs text-gray-400">
             {getStatusText()}
           </p>
+          {remainingTime > 0 && (
+            <div className="mt-2 flex items-center space-x-2">
+              <Clock className="h-3 w-3 text-orange-400" />
+              <span className="text-xs text-orange-300 font-medium">
+                Otomatik açılmaya: {formatTime(remainingTime)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
       <Dialog open={isCloseModalOpen} onOpenChange={setIsCloseModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Mağaza Kapatma</DialogTitle>
+            <DialogTitle>Mağaza Kapatma Seçenekleri</DialogTitle>
             <DialogDescription>
-              Restoranınızı bugün için kapatmak istediğinizden emin misiniz?
+              Restoranınızı kapatmak istediğiniz süreyi seçin
             </DialogDescription>
           </DialogHeader>
 
@@ -444,11 +572,22 @@ export default function RestaurantSidebar() {
               <h4 className="font-medium text-sm text-gray-900">Kısa Süreli Kapama</h4>
               <RadioGroup value={selectedCloseOption} onValueChange={setSelectedCloseOption}>
                 <div className="grid grid-cols-2 gap-3">
+                  {/* 30 dakika ve altı */}
                   {[5, 10, 15, 20, 25, 30].map((minutes) => (
                     <div key={`temp-${minutes}`} className="flex items-center space-x-2">
                       <RadioGroupItem value={`temp-${minutes}`} id={`temp-${minutes}`} />
                       <Label htmlFor={`temp-${minutes}`} className="flex-1 cursor-pointer">
-                        <div className="font-medium">{minutes} dakika</div>
+                        <div className="font-medium">{minutes} dk</div>
+                        <div className="text-xs text-gray-500">Otomatik açılır</div>
+                      </Label>
+                    </div>
+                  ))}
+                  {/* 1-2 saat arası */}
+                  {[45, 60, 75, 90, 105, 120].map((minutes) => (
+                    <div key={`temp-${minutes}`} className="flex items-center space-x-2">
+                      <RadioGroupItem value={`temp-${minutes}`} id={`temp-${minutes}`} />
+                      <Label htmlFor={`temp-${minutes}`} className="flex-1 cursor-pointer">
+                        <div className="font-medium">{Math.floor(minutes / 60)}s {minutes % 60}dk</div>
                         <div className="text-xs text-gray-500">Otomatik açılır</div>
                       </Label>
                     </div>
@@ -466,6 +605,13 @@ export default function RestaurantSidebar() {
                     <Label htmlFor="manual-close" className="flex-1 cursor-pointer">
                       <div className="font-medium">Bugün İçin Kapat</div>
                       <div className="text-xs text-gray-500">Yarın çalışma saatlerine göre otomatik açılır</div>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="seasonal-close" id="seasonal-close" />
+                    <Label htmlFor="seasonal-close" className="flex-1 cursor-pointer">
+                      <div className="font-medium">Dönemsel/Tatil Kapat</div>
+                      <div className="text-xs text-gray-500">Tüm günler kapatılır - manuel açılana kadar</div>
                     </Label>
                   </div>
                 </div>
