@@ -38,7 +38,8 @@ export async function middleware(request: NextRequest) {
     path === '/checkout' ||
     path.startsWith('/restaurants/') ||
     path === '/profile' ||
-    path === '/my-orders'
+    path === '/my-orders' ||
+    path === '/shop'
   ) {
     return NextResponse.next();
   }

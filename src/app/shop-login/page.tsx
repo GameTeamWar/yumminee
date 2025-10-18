@@ -15,6 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from '@/component
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EyeIcon, EyeOffIcon } from 'lucide-react';
 import { GeoPoint } from 'firebase/firestore';
+import { Label } from '@/components/ui/label';
 
 const loginSchema = z.object({
   email: z.string().email('Geçerli bir e-posta adresi giriniz'),
@@ -33,6 +34,7 @@ const registerSchema = z.object({
   restaurantName: z.string().min(2, 'Restoran adı en az 2 karakter olmalıdır'),
   description: z.string().optional(),
   phone: z.string().min(10, 'Geçerli bir telefon numarası giriniz'),
+  cuisine: z.array(z.string()).min(1, 'En az 1 mutfak türü seçmelisiniz').max(3, 'En fazla 3 mutfak türü seçebilirsiniz'),
   website: z.string().url('Geçerli bir website adresi giriniz').optional().or(z.literal('')),
   instagram: z.string().optional(),
   
@@ -57,7 +59,7 @@ export default function ShopLoginPage() {
   const [registerStep, setRegisterStep] = useState(1);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, user } = useAuth();
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -78,6 +80,7 @@ export default function ShopLoginPage() {
       restaurantName: '',
       description: '',
       phone: '',
+      cuisine: [],
       website: '',
       instagram: '',
       address: '',
@@ -92,6 +95,23 @@ export default function ShopLoginPage() {
     const mode = searchParams.get('mode');
     setIsRegisterMode(mode === 'register');
   }, [searchParams]);
+
+  // Kullanıcı zaten giriş yapmışsa panele yönlendir
+  useEffect(() => {
+    if (user && user.uid) {
+      // Restoranı bul ve dashboard'a yönlendir
+      getRestaurantByOwnerId(user.uid).then((restaurant) => {
+        if (restaurant) {
+          router.push(`/shop?panel=${restaurant.id}`);
+        } else {
+          router.push('/shop');
+        }
+      }).catch((error) => {
+        console.error('Restoran kontrol hatası:', error);
+        router.push('/shop');
+      });
+    }
+  }, [user, router]);
 
   // Mod değiştiğinde URL'yi güncelle
   const toggleMode = () => {
@@ -109,7 +129,7 @@ export default function ShopLoginPage() {
       const userProfile = await getUserProfileByEmailAndRole(data.email, 'restaurant');
       
       if (!userProfile) {
-        toast.error('Bu e-posta adresi ile müşteri hesabı bulunmuyor. Lütfen doğru bilgileri girdiğinizdan emin olun veya hesap oluşturun.');
+        toast.error('Bu e-posta adresi ile restoran sahibi hesabı bulunmuyor. Lütfen doğru bilgileri girdiğinizdan emin olun veya hesap oluşturun.');
         return;
       }
       
@@ -139,7 +159,7 @@ export default function ShopLoginPage() {
       // E-posta ile mevcut kullanıcı var mı kontrol et
       const existingProfile = await getUserProfileByEmailAndRole(data.email, 'restaurant');
       if (existingProfile) {
-        toast.error('Bu e-posta adresi ile zaten kayıtlı bir hesap bulunuyor.');
+        toast.error('Bu e-posta adresı ile zaten kayıtlı bir hesap bulunuyor.');
         return;
       }
 
@@ -166,7 +186,7 @@ export default function ShopLoginPage() {
         address: data.address,
         image: '/images/restaurants/default.jpg',
         description: data.description || '',
-        cuisine: [],
+        cuisine: data.cuisine,
         categories: [],
         rating: 0,
         reviewCount: 0,
@@ -199,7 +219,7 @@ export default function ShopLoginPage() {
     if (registerStep === 1) {
       fieldsToValidate = ['firstName', 'lastName', 'email', 'password', 'confirmPassword'];
     } else if (registerStep === 2) {
-      fieldsToValidate = ['restaurantName', 'phone'];
+      fieldsToValidate = ['restaurantName', 'phone', 'cuisine'];
     } else if (registerStep === 3) {
       fieldsToValidate = ['address'];
     }
@@ -554,6 +574,66 @@ export default function ShopLoginPage() {
                                     {...field}
                                   />
                                 </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={registerForm.control}
+                            name="cuisine"
+                            render={({ field }) => (
+                              <FormItem>
+                                <div className="space-y-3">
+                                  <Label className="text-sm font-medium">Mutfak Türleri (En az 1, en fazla 3)</Label>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    {{
+                                      'Türk Mutfağı',
+                                      'İtalyan',
+                                      'Fast Food',
+                                      'Kebap',
+                                      'Deniz Ürünleri',
+                                      'Çin Mutfağı',
+                                      'Japon Mutfağı',
+                                      'Meksika Mutfağı',
+                                      'Vejetaryen',
+                                      'Vegan',
+                                      'Tatlılar',
+                                      'Kahve & Çay',
+                                      'Street Food',
+                                      'Dünya Mutfağı'
+                                    }.map((cuisineType) => (
+                                      <div key={cuisineType} className="flex items-center space-x-2">
+                                        <input
+                                          type="checkbox"
+                                          id={`cuisine-${cuisineType}`}
+                                          checked={field.value?.includes(cuisineType) || false}
+                                          onChange={(e) => {
+                                            const currentValues = field.value || [];
+                                            if (e.target.checked) {
+                                              if (currentValues.length < 3) {
+                                                field.onChange([...currentValues, cuisineType]);
+                                              }
+                                            } else {
+                                              field.onChange(currentValues.filter(v => v !== cuisineType));
+                                            }
+                                          }}
+                                          disabled={isLoading}
+                                          className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                                        />
+                                        <Label
+                                          htmlFor={`cuisine-${cuisineType}`}
+                                          className="text-sm font-normal cursor-pointer"
+                                        >
+                                          {cuisineType}
+                                        </Label>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <p className="text-xs text-gray-500">
+                                    Seçili: {field.value?.length || 0}/3
+                                  </p>
+                                </div>
                                 <FormMessage />
                               </FormItem>
                             )}

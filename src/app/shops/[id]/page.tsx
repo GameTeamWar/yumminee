@@ -26,7 +26,7 @@ interface SimpleCategory {
   id: string;
   name: string;
 }
-import { getRestaurantStatus, formatWorkingHours } from '@/lib/utils/restaurantHours';
+import { getRestaurantStatus, formatWorkingHours, formatAllWorkingHours } from '@/lib/utils/restaurantHours';
 import { calculateDistanceInKm } from '@/lib/maps/map-utils';
 import { LocationPicker } from '@/components/maps/LocationPicker';
 import { AddressSelectionModal } from '@/components/AddressSelectionModal';
@@ -55,6 +55,7 @@ export default function RestaurantDetailPage() {
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showProductModal, setShowProductModal] = useState(false);
+  const [showHoursModal, setShowHoursModal] = useState(false);
 
   useEffect(() => {
     const loadRestaurantData = async () => {
@@ -347,6 +348,10 @@ export default function RestaurantDetailPage() {
                     src={restaurant.image}
                     alt={restaurant.name}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Görsel yüklenemezse varsayılan görsele geç
+                      (e.target as HTMLImageElement).src = '/images/restaurants/default.jpg';
+                    }}
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center">
@@ -431,12 +436,24 @@ export default function RestaurantDetailPage() {
                 {/* Çalışma Saatleri */}
                 <div className="flex flex-col gap-1">
                   <span className="text-sm text-white md:text-gray-600">Çalışma Saatleri</span>
-                  <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setShowHoursModal(true)}
+                    className="flex items-center gap-2 hover:opacity-80 transition-opacity text-left"
+                  >
                     <Clock className="h-4 w-4 text-white md:text-gray-500" />
-                    <span className="font-medium text-white md:text-gray-900">
-                      {restaurant.workingHours ? formatWorkingHours(restaurant.workingHours) : '08:00-22:00'}
-                    </span>
-                  </div>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-white md:text-gray-900">
+                        {restaurant.openingHours ? formatWorkingHours(restaurant.openingHours) : '08:00-22:00'}
+                      </span>
+                      {/* Açık/Kapalı Durumu */}
+                      <div className="flex items-center gap-1 mt-1">
+                        <div className={`w-2 h-2 rounded-full ${isOpen ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <span className={`text-xs font-medium ${isOpen ? 'text-green-400 md:text-green-600' : 'text-red-400 md:text-red-600'}`}>
+                          {statusText}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
                 </div>
 
                 {/* Minimum Tutar */}
@@ -526,7 +543,11 @@ export default function RestaurantDetailPage() {
                             height="110"
                             decoding="async"
                             className="rounded-8 object-cover h-[110px]"
-                            src={product.imageUrl || '/placeholder-food.jpg'}
+                            src={product.imageUrl || '/images/products/default.jpg'}
+                            onError={(e) => {
+                              // Görsel yüklenemezse varsayılan ürürn görseline geç
+                              (e.target as HTMLImageElement).src = '/images/products/default.jpg';
+                            }}
                             style={{color: 'transparent'}}
                           />
                           <div className="flex flex-col gap-1 flex-1 overflow-hidden">
@@ -670,6 +691,37 @@ export default function RestaurantDetailPage() {
         selectedAddress={selectedAddress as CustomerAddress}
         onAddressSelect={handleAddressSelectClick}
       />
+
+      {/* Çalışma Saatleri Modal */}
+      <Dialog open={showHoursModal} onOpenChange={setShowHoursModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Çalışma Saatleri
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {restaurant?.openingHours ? (
+              <div className="space-y-2">
+                {formatAllWorkingHours(restaurant.openingHours).split('\n').map((line, index) => (
+                  <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+                    <span className="font-medium text-gray-900">{line.split(': ')[0]}</span>
+                    <span className={`text-sm ${line.includes('Kapalı') ? 'text-red-600' : 'text-green-600'}`}>
+                      {line.split(': ')[1]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p>Çalışma saatleri bilgisi bulunmuyor</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Adres Seçimi Modal */}
       <AddressSelectionModal

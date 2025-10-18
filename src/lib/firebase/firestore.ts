@@ -227,12 +227,12 @@ export const addProduct = async (
 // Sipariş oluştur
 export const createOrder = async (
   userId: string,
-  restaurantId: string,
+  shopId: string,
   order: Omit<Order, 'id' | 'createdAt' | 'orderAcceptDeadline' | 'status'>
 ) => {
   try {
     const settings = await getSystemSettings();
-    const restaurant = await getRestaurant(restaurantId);
+    const restaurant = await getRestaurant(shopId);
     
     if (!restaurant) {
       throw new Error('Restoran bulunamadı');
@@ -246,7 +246,7 @@ export const createOrder = async (
     const orderData = {
       ...order,
       userId,
-      restaurantId,
+      shopId,
       status: 'pending' as OrderStatus,
       createdAt: now,
       orderAcceptDeadline: deadline,
@@ -308,7 +308,7 @@ export const updateOrderStatus = async (
 
 // Restoran siparişlerini getir
 export const getRestaurantOrders = async (
-  restaurantId: string,
+  shopId: string,
   status?: OrderStatus | OrderStatus[],
   lastVisible?: QueryDocumentSnapshot<DocumentData>,
   itemsPerPage = 20
@@ -324,7 +324,7 @@ export const getRestaurantOrders = async (
         
       ordersQuery = query(
         collection(db, 'orders'),
-        where('restaurantId', '==', restaurantId),
+        where('shopId', '==', shopId),
         where('status', 'in', statusCondition),
         orderBy('createdAt', 'desc'),
         limit(itemsPerPage)
@@ -333,7 +333,7 @@ export const getRestaurantOrders = async (
       // Tüm siparişleri getir
       ordersQuery = query(
         collection(db, 'orders'),
-        where('restaurantId', '==', restaurantId),
+        where('shopId', '==', shopId),
         orderBy('createdAt', 'desc'),
         limit(itemsPerPage)
       );

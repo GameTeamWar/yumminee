@@ -82,10 +82,19 @@ export default function Home() {
         </div>
         <div className="flex-1 relative h-[300px] w-full">
           <div className="relative h-full w-full">
-            {/* Buraya bir görsel ekleyeceksiniz */}
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold">
-              Yummine Yemek Görseli
-            </div>
+            <img
+              src="/images/hero-food.jpg"
+              alt="Yummine Yemek"
+              className="w-full h-full object-cover rounded-2xl"
+              onError={(e) => {
+                // Görsel yüklenemezse gradient background göster
+                (e.target as HTMLElement).style.display = 'none';
+                const parent = (e.target as HTMLElement).parentElement;
+                if (parent) {
+                  parent.innerHTML = '<div class="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold">Yummine Yemek</div>';
+                }
+              }}
+            />
           </div>
         </div>
       </div>

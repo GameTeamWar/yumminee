@@ -127,8 +127,6 @@ export default function ProductsPage() {
     loadRestaurantData()
   }, [user?.uid])
 
-
-
   const handleDelete = async (productId: string) => {
     if (!confirm('Bu ürünü silmek istediğinizden emin misiniz?')) return
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +23,7 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { getRestaurantByOwnerId, Shop } from '@/lib/firebase/db';
 
 // Mock customers data
 const customers = [
@@ -103,7 +105,10 @@ const customers = [
 ];
 
 export default function CustomersPage() {
-  const { user } = useAuth();
+  const { user, userProfile, loading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const panelId = searchParams.get('panel');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -139,6 +144,17 @@ export default function CustomersPage() {
       />
     ));
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Müşteriler yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">

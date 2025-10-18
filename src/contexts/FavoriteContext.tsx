@@ -6,7 +6,8 @@ import {
   addFavoriteRestaurant,
   removeFavoriteRestaurant,
   isRestaurantFavorite,
-  getFavoriteRestaurants
+  getFavoriteRestaurants,
+  subscribeToUserFavorites
 } from '@/lib/firebase/db';
 import { toast } from 'sonner';
 
@@ -41,13 +42,38 @@ export const FavoriteProvider: React.FC<FavoriteProviderProps> = ({ children }) 
   const [favoriteRestaurantIds, setFavoriteRestaurantIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Favorites için unsubscribe function
+  const [favoritesUnsubscribe, setFavoritesUnsubscribe] = useState<(() => void) | null>(null);
+
   // Load favorites when user changes
   useEffect(() => {
     if (user?.uid) {
-      refreshFavorites();
+      // Önceki listener'ı temizle
+      if (favoritesUnsubscribe) {
+        favoritesUnsubscribe();
+      }
+
+      // Gerçek zamanlı favorites dinlemesi başlat
+      const unsubscribe = subscribeToUserFavorites(user.uid, (favoriteIds) => {
+        setFavoriteRestaurantIds(favoriteIds);
+      });
+
+      setFavoritesUnsubscribe(() => unsubscribe);
     } else {
       setFavoriteRestaurantIds([]);
+      // User çıkış yaptıysa listener'ı temizle
+      if (favoritesUnsubscribe) {
+        favoritesUnsubscribe();
+        setFavoritesUnsubscribe(null);
+      }
     }
+
+    // Cleanup function
+    return () => {
+      if (favoritesUnsubscribe) {
+        favoritesUnsubscribe();
+      }
+    };
   }, [user?.uid]);
 
   const refreshFavorites = async () => {

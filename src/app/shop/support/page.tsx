@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ import {
   User
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { getRestaurantByOwnerId, Shop } from '@/lib/firebase/db';
 
 // Mock support tickets data
 const supportTickets = [
@@ -118,7 +120,10 @@ const faqs = [
 ];
 
 export default function SupportPage() {
-  const { user } = useAuth();
+  const { user, userProfile, loading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const panelId = searchParams.get('panel');
   const [activeTab, setActiveTab] = useState('tickets');
   const [selectedTicket, setSelectedTicket] = useState<typeof supportTickets[0] | null>(null);
   const [newMessage, setNewMessage] = useState('');
@@ -193,6 +198,17 @@ export default function SupportPage() {
         return category;
     }
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Destek yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">

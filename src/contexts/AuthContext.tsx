@@ -14,9 +14,12 @@ import {
   reauthenticateWithCredential,
   updatePassword as firebaseUpdatePassword
 } from "firebase/auth";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
 import { auth } from "@/lib/firebase/config";
-import { getUserProfile, getUserProfileByEmailAndRole } from "@/lib/firebase/db";
+import { getUserProfile, getUserProfileByEmailAndRole, getCustomerUser, subscribeToUserAddresses, subscribeToUserOrders } from "@/lib/firebase/db";
 import { UserProfile } from "@/lib/firebase/types";
+import { CustomerAddress, Order } from "@/lib/firebase/db";
 import { toast } from 'sonner';
 
 interface AuthContextType {
@@ -24,7 +27,9 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   loading: boolean;
   currentRole: string | null;
-  signIn: (email: string, password: string, role?: string) => Promise<User>;
+  addresses: CustomerAddress[];
+  orders: Order[];
+  signIn: (email: string, password: string, role: string) => Promise<User>;
   signUp: (email: string, password: string, displayName: string) => Promise<User>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -83,13 +88,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [currentRole, setCurrentRole] = useState<string | null>(null);
   const [tabId] = useState(() => Date.now().toString()); // Her sekme için unique ID
+  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  // User profile için unsubscribe function
+  const [profileUnsubscribe, setProfileUnsubscribe] = useState<(() => void) | null>(null);
+  // Addresses için unsubscribe function
+  const [addressesUnsubscribe, setAddressesUnsubscribe] = useState<(() => void) | null>(null);
+  // Orders için unsubscribe function
+  const [ordersUnsubscribe, setOrdersUnsubscribe] = useState<(() => void) | null>(null);
 
   // URL'den role belirleme
   const getCurrentRoleFromURL = (): string => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
       if (path.startsWith('/shop') || path.includes('shop')) {
-        return 'restaurant';
+        return 'shop';
       } else if (path.startsWith('/courier') || path.includes('courier')) {
         return 'courier';
       } else {
@@ -187,10 +201,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
           }
 
+          // Önce kullanıcının bu role için profili var mı kontrol et
           const profile = await getUserProfileByEmailAndRole(currentUser.email, roleToCheck);
 
           if (profile) {
             setUserProfile(profile as UserProfile);
+
+            // Customer role için gerçek zamanlı profile dinlemesi başlat
+            if (roleToCheck === 'customer' && profile.id) {
+              // Önceki listener'ı temizle
+              if (profileUnsubscribe) {
+                profileUnsubscribe();
+              }
+
+              // Yeni profile listener başlat
+              const newProfileUnsubscribe = onSnapshot(doc(db, 'customerUsers', profile.id), (docSnap) => {
+                if (docSnap.exists()) {
+                  const updatedProfile = { id: docSnap.id, ...docSnap.data() } as UserProfile;
+                  setUserProfile(updatedProfile);
+                }
+              }, (error) => {
+                console.error('User profile real-time listener error:', error);
+              });
+
+              setProfileUnsubscribe(() => newProfileUnsubscribe);
+
+              // Addresses için gerçek zamanlı dinleme başlat
+              if (addressesUnsubscribe) {
+                addressesUnsubscribe();
+              }
+
+              const newAddressesUnsubscribe = subscribeToUserAddresses(profile.id, (updatedAddresses) => {
+                setAddresses(updatedAddresses);
+              });
+
+              setAddressesUnsubscribe(() => newAddressesUnsubscribe);
+
+              // Orders için gerçek zamanlı dinleme başlat
+              if (ordersUnsubscribe) {
+                ordersUnsubscribe();
+              }
+
+              const newOrdersUnsubscribe = subscribeToUserOrders(profile.id, (updatedOrders) => {
+                setOrders(updatedOrders);
+              });
+
+              setOrdersUnsubscribe(() => newOrdersUnsubscribe);
+            }
 
             // Eğer başka bir sekmeden giriş yapıldıysa bilgilendir
             if (isNewLogin && localStorage.getItem('auth-multi-tab-warning-shown') !== 'true') {
@@ -202,10 +259,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setTimeout(() => localStorage.removeItem('auth-multi-tab-warning-shown'), 5000);
             }
           } else {
-            // Bu role için profil yoksa sadece profili null yap, çıkış yapma
+            // Bu role için profil yoksa, kullanıcının mevcut rollerini kontrol et
             console.warn(`${roleToCheck} rolü için profil bulunamadı:`, currentUser.email);
-            setUserProfile(null);
-            // Çıkış yapma - kullanıcı başka sekmelerde farklı rollerle giriş yapmış olabilir
+            
+            // Kullanıcının hangi rolleri var kontrol et
+            const availableRoles = await getAvailableRolesForUser(currentUser.email);
+            
+            if (availableRoles.length > 0) {
+              // Kullanıcı başka rollerde hesapları var, ama bu rolde yok
+              console.log(`Kullanıcı ${availableRoles.join(', ')} rollerinde hesapları var ama ${roleToCheck} rolünde yok`);
+              setUserProfile(null);
+              // Kullanıcıyı çıkış yaptırma - başka sekmelerde farklı rollerle giriş yapmış olabilir
+            } else {
+              // Kullanıcı hiç profil oluşturmamış
+              console.log('Kullanıcı hiç profil oluşturmamış');
+              setUserProfile(null);
+            }
           }
         } catch (error) {
           console.error('Token veya profil alınamadı:', error);
@@ -215,6 +284,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Kullanıcı çıkış yapmışsa token'ı temizle ve profili sıfırla
         document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         setUserProfile(null);
+
+        // Profile listener'ı temizle
+        if (profileUnsubscribe) {
+          profileUnsubscribe();
+          setProfileUnsubscribe(null);
+        }
+
+        // Addresses listener'ı temizle
+        if (addressesUnsubscribe) {
+          addressesUnsubscribe();
+          setAddressesUnsubscribe(null);
+        }
+
+        // Orders listener'ı temizle
+        if (ordersUnsubscribe) {
+          ordersUnsubscribe();
+          setOrdersUnsubscribe(null);
+        }
+
+        // Addresses ve Orders state'lerini sıfırla
+        setAddresses([]);
+        setOrders([]);
 
         // Eğer çıkış başka bir sekmeden yapıldıysa bilgilendir
         if (isLogout && !localStorage.getItem('auth-user-logout-triggered')) {
@@ -229,8 +320,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, [tabId]); // currentRole yerine tabId kullanıyoruz
 
-  const signIn = async (email: string, password: string, role?: string) => {
+  // Component unmount olduğunda listener'ları temizle
+  useEffect(() => {
+    return () => {
+      if (profileUnsubscribe) {
+        profileUnsubscribe();
+      }
+      if (addressesUnsubscribe) {
+        addressesUnsubscribe();
+      }
+      if (ordersUnsubscribe) {
+        ordersUnsubscribe();
+      }
+    };
+  }, [profileUnsubscribe, addressesUnsubscribe, ordersUnsubscribe]);
+
+  const signIn = async (email: string, password: string, role: string) => {
     try {
+      if (!role) {
+        throw new Error('Role parametresi zorunludur');
+      }
+      
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
       // Auth token cookie'si oluştur
@@ -238,10 +348,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const isProduction = process.env.NODE_ENV === 'production';
       document.cookie = `auth-token=${token}; path=/; max-age=86400; ${isProduction ? 'secure;' : ''} samesite=strict`;
       
-      // Role belirtildiyse güncelle
-      if (role) {
-        setTabRole(role);
-      }
+      // Role belirterek tab role'unu ayarla
+      setTabRole(role);
       
       return userCredential.user;
     } catch (error: any) {
@@ -434,6 +542,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true; // Şimdilik tüm email'lere izin ver
   };
 
+  // Kullanıcının email'ine göre mevcut rollerini al
+  const getAvailableRolesForUser = async (email: string): Promise<string[]> => {
+    try {
+      const roles = ['customer', 'restaurant', 'courier'];
+      const availableRoles: string[] = [];
+
+      for (const role of roles) {
+        try {
+          const profile = await getUserProfileByEmailAndRole(email, role);
+          if (profile) {
+            availableRoles.push(role);
+          }
+        } catch (error) {
+          // Bu rolde profil yok, devam et
+          console.log(`${role} rolü için profil bulunamadı:`, error);
+        }
+      }
+
+      return availableRoles;
+    } catch (error) {
+      console.error('Mevcut roller alınırken hata:', error);
+      return [];
+    }
+  };
+
   // Ayrı hesap modu için rol kontrolü
   const checkEmailAvailabilityForRole = async (email: string, role: string): Promise<boolean> => {
     try {
@@ -463,6 +596,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     userProfile,
     loading,
     currentRole,
+    addresses,
+    orders,
     signIn,
     signUp,
     signOut,

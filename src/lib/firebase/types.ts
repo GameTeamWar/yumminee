@@ -31,7 +31,8 @@ export interface UserProfile {
   email: string;
   phoneNumber: string;
   address: string;
-  role: 'customer' | 'restaurant' | 'courier' | 'admin';
+  role: 'customer' | 'shop' | 'courier' | 'admin';
+  restaurantId?: string; // Restaurant ID for shop owners
   profilePicture?: string;
   dateOfBirth?: string;
   gender?: 'male' | 'female' | 'other';

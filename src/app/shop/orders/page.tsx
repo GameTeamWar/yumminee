@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase/config';
+import { getRestaurantByOwnerId, Shop } from '@/lib/firebase/db';
 import { collection, onSnapshot, query, where, orderBy, updateDoc, doc } from 'firebase/firestore';
 import { toast } from 'sonner';
 
@@ -65,9 +67,12 @@ const statusConfig = {
 };
 
 export default function OrdersPage() {
-  const { user } = useAuth();
+  const { user, userProfile, loading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const panelId = searchParams.get('panel');
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingOrders, setLoadingOrders] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -80,7 +85,7 @@ export default function OrdersPage() {
     const ordersRef = collection(db, 'orders');
     const q = query(
       ordersRef,
-      where('restaurantId', '==', user.uid),
+      where('shopId', '==', user.uid),
       orderBy('createdAt', 'desc')
     );
 
@@ -92,11 +97,11 @@ export default function OrdersPage() {
       })) as Order[];
 
       setOrders(ordersData);
-      setLoading(false);
+      setLoadingOrders(false);
     }, (error) => {
       console.error('Siparişler yüklenirken hata:', error);
       toast.error('Siparişler yüklenirken hata oluştu');
-      setLoading(false);
+      setLoadingOrders(false);
     });
 
     return () => unsubscribe();

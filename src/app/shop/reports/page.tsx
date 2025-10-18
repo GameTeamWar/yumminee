@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -17,6 +18,7 @@ import {
   Filter
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { getRestaurantByOwnerId, Shop } from '@/lib/firebase/db';
 
 // Mock data for reports
 const salesData = [
@@ -46,7 +48,10 @@ const customerStats = {
 };
 
 export default function ReportsPage() {
-  const { user } = useAuth();
+  const { user, userProfile, loading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const panelId = searchParams.get('panel');
   const [timeRange, setTimeRange] = useState('7days');
   const [reportType, setReportType] = useState('sales');
 
@@ -54,6 +59,17 @@ export default function ReportsPage() {
   const totalOrders = salesData.reduce((sum, day) => sum + day.orders, 0);
   const totalCustomers = salesData.reduce((sum, day) => sum + day.customers, 0);
   const avgOrderValue = totalRevenue / totalOrders;
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Raporlar yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">

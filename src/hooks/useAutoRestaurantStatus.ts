@@ -8,38 +8,43 @@ import { db } from '@/lib/firebase/config';
 
 /**
  * Restoranın çalışma saatlerine göre otomatik açık/kapalı durumunu yöneten hook
- * Sadece manuel olarak kapatılmamış restoranlar için çalışır
+ * Manuel açık ise otomatik kapanış yapmaz
  */
-export function useAutoRestaurantStatus(restaurant: Restaurant | null) {
+export function useAutoRestaurantStatus(restaurant: Restaurant | null, isManuallyClosed: boolean = false, isManualOpen: boolean = false) {
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    if (!restaurant?.workingHours || !restaurant.id) return;
+    if (!restaurant?.openingHours || !restaurant.id || isManualOpen) return;
 
     const checkAndUpdateStatus = async () => {
       try {
-        // Eğer restoran manuel olarak kapatılmışsa (isOpen = false), otomatik açma
-        if (restaurant.isOpen === false) {
-          return;
-        }
+        const shouldBeOpen = isRestaurantOpenBasedOnHours(restaurant.openingHours!);
+        console.log(`Hook: Restoran açık: ${restaurant.isOpen}, saatlere göre açık olmalı: ${shouldBeOpen}, manuel kapalı: ${isManuallyClosed}, manuel açık: ${isManualOpen}`);
 
-        // Çalışma saatleri varsa kontrol et
-        if (!restaurant.workingHours) return;
-
-        // Çalışma saatlerine göre açık olmalı mı kontrol et
-        const shouldBeOpen = isRestaurantOpenBasedOnHours(restaurant.workingHours);
-
-        // Durum farklıysa güncelle
-        if (shouldBeOpen !== restaurant.isOpen) {
+        // Açma her zaman (manuel açık olsa bile saatlere göre aç)
+        if (shouldBeOpen && !restaurant.isOpen) {
           setIsUpdating(true);
 
-          const restaurantRef = doc(db, 'restaurants', restaurant.id);
+          const restaurantRef = doc(db, 'shops', restaurant.id);
           await updateDoc(restaurantRef, {
-            isOpen: shouldBeOpen,
+            isOpen: true,
             updatedAt: new Date()
           });
 
-          console.log(`Restoran ${restaurant.name} otomatik olarak ${shouldBeOpen ? 'açıldı' : 'kapandı'}`);
+          console.log(`Restoran ${restaurant.name} saatlere göre otomatik olarak açıldı`);
+        }
+
+        // Kapanış manuel açık değilse
+        if (!isManualOpen && !shouldBeOpen && restaurant.isOpen) {
+          setIsUpdating(true);
+
+          const restaurantRef = doc(db, 'shops', restaurant.id);
+          await updateDoc(restaurantRef, {
+            isOpen: false,
+            updatedAt: new Date()
+          });
+
+          console.log(`Restoran ${restaurant.name} saatlere göre otomatik olarak kapatıldı`);
         }
       } catch (error) {
         console.error('Restoran durumu güncellenirken hata:', error);
@@ -48,14 +53,14 @@ export function useAutoRestaurantStatus(restaurant: Restaurant | null) {
       }
     };
 
-    // İlk kontrol
+    // İlk kontrol - hemen çalış
     checkAndUpdateStatus();
 
-    // Her dakika kontrol et
-    const interval = setInterval(checkAndUpdateStatus, 60000); // 1 dakika
+    // Her saniye kontrol et - kapanış saatinde hemen kapatmak için
+    const interval = setInterval(checkAndUpdateStatus, 1000); // 1 saniye
 
     return () => clearInterval(interval);
-  }, [restaurant]);
+  }, [restaurant, isManuallyClosed, isManualOpen]); // restaurant, isManuallyClosed veya isManualOpen değiştiğinde çalış
 
   return { isUpdating };
 }

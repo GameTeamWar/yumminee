@@ -115,7 +115,7 @@ export default function ShopsLoginPage() {
       }
 
       // Hesap oluştur
-      const user = await signUp(data.email, data.password, 'restaurant');
+      const user = await signUp(data.email, data.password, `${data.firstName} ${data.lastName}`);
 
       await createUserProfile(user.uid, {
         firstName: data.firstName,
@@ -143,9 +143,8 @@ export default function ShopsLoginPage() {
         averageRating: 0,
       });
 
-      toast.success('Hesabınız başarıyla oluşturuldu!');
-      router.push('/');
-      router.refresh();
+      toast.success('Hesabınız başarıyla oluşturuldu! Lütfen giriş yapın.');
+      setIsRegisterMode(false);
     } catch (error: any) {
       console.error('Register error:', error);
       toast.error('Kayıt olunurken hata: ' + (error.message || 'Bilinmeyen hata'));

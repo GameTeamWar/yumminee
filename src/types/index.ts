@@ -51,7 +51,7 @@ export interface Shop {
   minimumOrderAmount: number; // TL cinsinden - minimum sipariş tutarı
   isOpen: boolean;
   ownerId: string; // Shop sahibi
-  workingHours?: WorkingHours; // Çalışma saatleri
+  openingHours?: WorkingHours; // Çalışma saatleri
   // Yeni eklenen alanlar
   website?: string;
   socialMedia?: {

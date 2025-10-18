@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import {
@@ -94,16 +94,50 @@ const menuItems = [
 
 export default function RestaurantSidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
+  const panelId = searchParams.get('panel');
+
+  // Panel parametresi ile link oluştur
+  const createLink = (href: string) => {
+    if (panelId) {
+      return `${href}?panel=${panelId}`;
+    }
+    return href;
+  };
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(true); // Restaurant açık/kapalı durumu
   const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
   const [selectedCloseOption, setSelectedCloseOption] = useState<string>('');
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [isManuallyClosed, setIsManuallyClosed] = useState(false); // Manuel kapatma flag'i
+  const [temporaryCloseTimer, setTemporaryCloseTimer] = useState<NodeJS.Timeout | null>(null);
+  const [remainingTime, setRemainingTime] = useState<number>(0);
 
   // Otomatik restoran durumu hook'u
   useAutoRestaurantStatus(isManuallyClosed ? null : restaurant);
+
+  // Kısa süreli kapatma timer'ı
+  useEffect(() => {
+    if (remainingTime > 0) {
+      const timer = setTimeout(() => {
+        setRemainingTime(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (remainingTime === 0 && temporaryCloseTimer) {
+      // Timer tamamlandı, restoranı otomatik aç
+      handleAutoOpenRestaurant();
+    }
+  }, [remainingTime, temporaryCloseTimer]);
+
+  // Component unmount olduğunda timer'ı temizle
+  useEffect(() => {
+    return () => {
+      if (temporaryCloseTimer) {
+        clearTimeout(temporaryCloseTimer);
+      }
+    };
+  }, [temporaryCloseTimer]);
 
   // Restaurant verilerini real-time olarak yükle
   useEffect(() => {
@@ -122,7 +156,7 @@ export default function RestaurantSidebar() {
       }
 
       // Restaurant dokümanına real-time listener ekle
-      const restaurantRef = doc(db, 'restaurants', restaurantDocId);
+      const restaurantRef = doc(db, 'shops', restaurantDocId);
       const unsubscribe = onSnapshot(restaurantRef, (doc) => {
         if (doc.exists()) {
           const restaurantData = { id: doc.id, ...doc.data() } as Restaurant;
@@ -153,23 +187,6 @@ export default function RestaurantSidebar() {
     };
   }, [user?.uid]);
 
-  // Bugünkü çalışma saatlerini al
-  const getTodaysHours = () => {
-    // Eğer restoran genel olarak kapalıysa "Kapalı" göster
-    if (!isOpen) return 'Kapalı';
-
-    if (!restaurant?.workingHours) return '08:00 - 23:00';
-
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const today = new Date().getDay();
-    const todayKey = days[today] as keyof typeof restaurant.workingHours;
-
-    const todayHours = restaurant.workingHours[todayKey];
-    if (!todayHours.isOpen) return 'Kapalı';
-
-    return `${todayHours.open} - ${todayHours.close}`;
-  };
-
   const toggleMenu = (menuTitle: string) => {
     setExpandedMenu(expandedMenu === menuTitle ? null : menuTitle);
   };
@@ -198,57 +215,39 @@ export default function RestaurantSidebar() {
   };
 
   const handleCloseRestaurant = async () => {
-    if (!restaurant) {
-      toast.error('Restoran bilgileri bulunamadı');
-      return;
-    }
-
-    if (!selectedCloseOption) {
-      toast.error('Lütfen bir kapatma seçeneği seçin');
-      return;
-    }
-
     try {
-      // Firebase'e kapat durumu kaydet
-      await updateRestaurant(restaurant.id, { isOpen: false });
-
-      // Seçilen seçeneğe göre işlem yap
-      switch (selectedCloseOption) {
-        case '15min':
-          toast.success('Restoran 15 dakika sonra otomatik açılacaktır');
-          setIsManuallyClosed(false); // Otomatik açılmaya izin ver
-          break;
-        case '30min':
-          toast.success('Restoran 30 dakika sonra otomatik açılacaktır');
-          setIsManuallyClosed(false); // Otomatik açılmaya izin ver
-          break;
-        case '60min':
-          toast.success('Restoran 60 dakika sonra otomatik açılacaktır');
-          setIsManuallyClosed(false); // Otomatik açılmaya izin ver
-          break;
-        case 'next-day':
-          toast.success('Restoran bir sonraki çalışma gününde otomatik açılacaktır');
-          setIsManuallyClosed(false); // Otomatik açılmaya izin ver
-          break;
-        case 'auto-open':
-          toast.success('Paneliniz sıradaki çalışma gün ve saatinizde otomatik açılacaktır');
-          setIsManuallyClosed(false); // Otomatik açılmaya izin ver
-          break;
-        case 'manual-open':
-          toast.success('Panelinizi tekrar manuel açana kadar kapalı kalacaktır');
-          setIsManuallyClosed(true); // Manuel açılana kadar otomatik açma
-          break;
-        case 'seasonal':
-          toast.success('Restoran dönemsel kapalı moda alındı');
-          setIsManuallyClosed(true); // Manuel açılana kadar otomatik açma
-          break;
-        case 'vacation':
-          toast.success('Restoran tatil moduna alındı');
-          setIsManuallyClosed(true); // Manuel açılana kadar otomatik açma
-          break;
+      if (!restaurant) {
+        toast.error('Restoran bilgileri bulunamadı');
+        return;
       }
 
-      setIsOpen(false);
+      if (selectedCloseOption.startsWith('temp-')) {
+        // Kısa süreli kapatma
+        const minutes = parseInt(selectedCloseOption.split('-')[1]);
+        const totalSeconds = minutes * 60;
+
+        // Restoranı kapat
+        await updateRestaurant(restaurant.id, { isOpen: false });
+        setIsOpen(false);
+        setIsManuallyClosed(true);
+        setRemainingTime(totalSeconds);
+
+        // Otomatik açılma için timer ayarla
+        const timer = setTimeout(async () => {
+          await handleAutoOpenRestaurant();
+        }, totalSeconds * 1000);
+
+        setTemporaryCloseTimer(timer);
+
+        toast.success(`${minutes} dakika sonra otomatik açılacak`);
+      } else {
+        // Manuel kapatma
+        await updateRestaurant(restaurant.id, { isOpen: false });
+        setIsOpen(false);
+        setIsManuallyClosed(true);
+        toast.success('Restoran kapatıldı');
+      }
+
       setIsCloseModalOpen(false);
       setSelectedCloseOption('');
     } catch (error) {
@@ -257,11 +256,26 @@ export default function RestaurantSidebar() {
     }
   };
 
+  const handleAutoOpenRestaurant = async () => {
+    try {
+      if (restaurant) {
+        await updateRestaurant(restaurant.id, { isOpen: true });
+        setIsOpen(true);
+        setIsManuallyClosed(false);
+        setTemporaryCloseTimer(null);
+        setRemainingTime(0);
+        toast.success('Restoran otomatik olarak açıldı');
+      }
+    } catch (error) {
+      console.error('Restoran açılırken hata:', error);
+      toast.error('Restoran açılırken bir hata oluştu');
+    }
+  };
+
   return (
     <aside className="fixed top-0 left-0 w-64 bg-gray-900 text-white h-screen flex flex-col z-50">
-      {/* Logo */}
       <div className="p-6 border-b border-gray-800">
-        <Link href="/shop" className="flex items-center space-x-2">
+        <Link href={createLink("/shop")} className="flex items-center space-x-2">
           <div className="bg-orange-500 p-2 rounded-lg">
             <Store className="h-6 w-6 text-white" />
           </div>
@@ -306,7 +320,7 @@ export default function RestaurantSidebar() {
                         return (
                           <Link
                             key={subItem.href}
-                            href={subItem.href}
+                            href={createLink(subItem.href)}
                             className={cn(
                               "flex items-center px-4 py-2 rounded-lg transition-colors text-sm",
                               isSubActive
@@ -327,7 +341,7 @@ export default function RestaurantSidebar() {
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={createLink(item.href)}
                 className={cn(
                   "flex items-center justify-between px-4 py-3 rounded-lg transition-colors",
                   isActive
@@ -357,25 +371,26 @@ export default function RestaurantSidebar() {
             <div className="flex items-center space-x-2">
               <div className={cn(
                 "w-2 h-2 rounded-full animate-pulse",
-                isOpen ? "bg-green-500" : "bg-red-500"
+                restaurant ? (isOpen ? "bg-green-500" : "bg-red-500") : "bg-gray-500"
               )}></div>
               <span className="text-sm font-medium">
-                {isOpen ? 'Restoran Açık' : 'Restoran Kapalı'}
+                {restaurant ? (isOpen ? 'Restoran Açık' : 'Restoran Kapalı') : 'Yükleniyor...'}
               </span>
             </div>
             <div className="flex items-center space-x-2">
               <span className="text-xs text-gray-400">
-                {isOpen ? 'Açık' : 'Kapalı'}
+                {restaurant ? (isOpen ? 'Açık' : remainingTime > 0 ? `${Math.ceil(remainingTime / 60)}dk` : 'Kapalı') : 'Yükleniyor'}
               </span>
               <Switch
-                checked={isOpen}
+                checked={restaurant ? isOpen : false}
                 onCheckedChange={handleToggleRestaurant}
+                disabled={!restaurant}
                 className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
               />
             </div>
           </div>
-          <p className="text-xs text-gray-400 cursor-pointer hover:text-orange-500 transition-colors" onClick={() => window.location.href = '/shop/settings?tab=hours'}>
-            Bugün {getTodaysHours()}
+          <p className="text-xs text-gray-400">
+            Durum: {restaurant ? (isOpen ? 'Hizmet Veriliyor' : remainingTime > 0 ? `Otomatik açılma: ${Math.ceil(remainingTime / 60)} dk` : 'Kapalı') : 'Yükleniyor'}
           </p>
         </div>
       </div>
@@ -391,84 +406,54 @@ export default function RestaurantSidebar() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <RadioGroup value={selectedCloseOption} onValueChange={setSelectedCloseOption}>
-              <div className="space-y-3">
-                <div className="font-medium text-sm text-gray-700 mb-2">Belirli bir süre kapat</div>
-                
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="15min" id="15min" />
-                  <Label htmlFor="15min" className="flex-1 cursor-pointer">
-                    <div className="font-medium">15 Dakika Kapat</div>
-                    <div className="text-xs text-gray-500">Restoran 15 Dakika sonra otomatik açılacaktır</div>
-                  </Label>
+            <div className="space-y-3">
+              <h4 className="font-medium text-sm text-gray-900">Kısa Süreli Kapama</h4>
+              <RadioGroup value={selectedCloseOption} onValueChange={setSelectedCloseOption}>
+                <div className="grid grid-cols-2 gap-3">
+                  {[5, 10, 15, 20, 25, 30].map((minutes) => (
+                    <div key={`temp-${minutes}`} className="flex items-center space-x-2">
+                      <RadioGroupItem value={`temp-${minutes}`} id={`temp-${minutes}`} />
+                      <Label htmlFor={`temp-${minutes}`} className="flex-1 cursor-pointer">
+                        <div className="font-medium">{minutes} dakika</div>
+                        <div className="text-xs text-gray-500">Otomatik açılır</div>
+                      </Label>
+                    </div>
+                  ))}
                 </div>
+              </RadioGroup>
+            </div>
 
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="30min" id="30min" />
-                  <Label htmlFor="30min" className="flex-1 cursor-pointer">
-                    <div className="font-medium">30 Dakika Kapat</div>
-                    <div className="text-xs text-gray-500">Restoran 30 Dakika sonra otomatik açılacaktır</div>
-                  </Label>
+            <div className="border-t pt-3">
+              <h4 className="font-medium text-sm text-gray-900 mb-3">Diğer Seçenekler</h4>
+              <RadioGroup value={selectedCloseOption} onValueChange={setSelectedCloseOption}>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="manual-open" id="manual-open" />
+                    <Label htmlFor="manual-open" className="flex-1 cursor-pointer">
+                      <div className="font-medium">Manuel Aç</div>
+                      <div className="text-xs text-gray-500">Paneli kendim açacağım</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="auto-open" id="auto-open" />
+                    <Label htmlFor="auto-open" className="flex-1 cursor-pointer">
+                      <div className="font-medium">Otomatik Aç</div>
+                      <div className="text-xs text-gray-500">Çalışma saatlerine göre</div>
+                    </Label>
+                  </div>
                 </div>
-
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="60min" id="60min" />
-                  <Label htmlFor="60min" className="flex-1 cursor-pointer">
-                    <div className="font-medium">60 Dakika Kapat</div>
-                    <div className="text-xs text-gray-500">Restoran 60 Dakika sonra otomatik açılacaktır</div>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="next-day" id="next-day" />
-                  <Label htmlFor="next-day" className="flex-1 cursor-pointer">
-                    <div className="font-medium">Bir sonraki çalışma gününe kadar kapat</div>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="auto-open" id="auto-open" />
-                  <Label htmlFor="auto-open" className="flex-1 cursor-pointer">
-                    <div className="font-medium">Panelim otomatik açılsın</div>
-                    <div className="text-xs text-gray-500">Paneliniz sıradaki çalışma gün ve saatinizde otomatik açılacaktır</div>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="manual-open" id="manual-open" />
-                  <Label htmlFor="manual-open" className="flex-1 cursor-pointer">
-                    <div className="font-medium">Paneli kendim açacağım</div>
-                    <div className="text-xs text-gray-500">Panelinizi tekrar manuel açana kadar kapalı kalacaktır</div>
-                  </Label>
-                </div>
-
-                <div className="font-medium text-sm text-gray-700 mb-2 mt-4">Belirli bir süre kapat</div>
-
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="seasonal" id="seasonal" />
-                  <Label htmlFor="seasonal" className="flex-1 cursor-pointer">
-                    <div className="font-medium">Dönemsel Kapalı</div>
-                    <div className="text-xs text-gray-500">Balık, dondurma gibi sezonsal faaliyet gösteren bir mutfak türüne sahipseniz ve uzun süre kapalı kalacaksanız seçebilirsiniz. Siz tekrar panelden açana kadar kapalı kalacaktır.</div>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="vacation" id="vacation" />
-                  <Label htmlFor="vacation" className="flex-1 cursor-pointer">
-                    <div className="font-medium">Tatil Modu ile kapat</div>
-                    <div className="text-xs text-gray-500">Geçici süreli tadilat, sağlık, tatil gibi sebepler için seçebilirsiniz. Tatil moduna aldıktan sonra panelinizi 15 saat geçtikten sonra açabilirsiniz. Bu özelliği haftada sadece 2 kez kullanabilirsiniz.</div>
-                  </Label>
-                </div>
-              </div>
-            </RadioGroup>
+              </RadioGroup>
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCloseModalOpen(false)}>
               İptal
             </Button>
-            <Button 
+            <Button
               onClick={handleCloseRestaurant}
+              disabled={!selectedCloseOption}
               className="bg-red-600 hover:bg-red-700"
             >
               Restoranı Kapat

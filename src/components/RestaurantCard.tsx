@@ -55,6 +55,10 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
                 src={restaurant.image}
                 alt={restaurant.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                onError={(e) => {
+                  // Görsel yüklenemezse varsayılan görsele geç
+                  (e.target as HTMLImageElement).src = '/images/restaurants/default.jpg';
+                }}
               />
               {/* Overlay gradient for better text readability */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -106,6 +110,14 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
                   <span className="font-medium">{restaurant.serviceRadius} km</span>
                 </div>
               )}
+
+              {/* Çalışma Saatleri */}
+              <div className="flex items-center space-x-1.5">
+                <div className={`w-2 h-2 rounded-full ${isOpen ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                <span className={`text-xs font-medium ${isOpen ? 'text-green-600' : 'text-red-600'}`}>
+                  {restaurant.openingHours ? formatWorkingHours(restaurant.openingHours) : '08:00-22:00'}
+                </span>
+              </div>
             </div>
 
             {/* Minimum Sipariş */}

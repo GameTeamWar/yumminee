@@ -19,7 +19,8 @@ import {
   Timestamp,
   GeoPoint,
   DocumentData,
-  QuerySnapshot
+  QuerySnapshot,
+  deleteField
 } from 'firebase/firestore';
 import {
   ref,
@@ -356,6 +357,9 @@ export const generateId = (length: number = 11): string => {
   return numericId.substring(0, length);
 };
 
+// Re-export Firestore utilities for convenience
+export { deleteField };
+
 // ================== UID MAPPINGS ==================
 
 // UID to User ID mappings for all user types
@@ -665,7 +669,7 @@ export const getShopsByOwner = async (ownerId: string): Promise<Shop[]> => {
   }
 };
 
-export const updateShop = async (shopId: string, updates: Partial<Shop>): Promise<void> => {
+export const updateShop = async (shopId: string, updates: Partial<Shop> & Record<string, any>): Promise<void> => {
   try {
     await updateDoc(doc(db, 'shops', shopId), {
       ...updates,
@@ -1509,15 +1513,36 @@ export const checkPhoneExists = async (phoneNumber: string, userType: 'admin' | 
 // User profile aliases
 export const getUserProfile = getCustomerUser;
 export const getUserProfileByEmailAndRole = async (email: string, role: string) => {
-  // This is a simplified version - in real implementation you'd need to check all user types
-  if (role === 'customer') {
-    const querySnapshot = await getDocs(query(collection(db, 'customerUsers'), where('email', '==', email)));
+  try {
+    let collectionName = '';
+    switch (role) {
+      case 'admin':
+        collectionName = 'adminUsers';
+        break;
+      case 'courier':
+        collectionName = 'courierUsers';
+        break;
+      case 'restaurant':
+      case 'shop':
+        collectionName = 'shopUsers';
+        break;
+      case 'customer':
+        collectionName = 'customerUsers';
+        break;
+      default:
+        return null;
+    }
+
+    const querySnapshot = await getDocs(query(collection(db, collectionName), where('email', '==', email)));
     if (!querySnapshot.empty) {
       const doc = querySnapshot.docs[0];
-      return { id: doc.id, ...doc.data() } as CustomerUser;
+      return { id: doc.id, ...doc.data() };
     }
+    return null;
+  } catch (error) {
+    console.error('getUserProfileByEmailAndRole error:', error);
+    return null;
   }
-  return null;
 };
 export const createUserProfile = createCustomerUser;
 export const updateUserProfile = updateCustomerUser;
