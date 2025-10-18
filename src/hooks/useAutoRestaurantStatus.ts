@@ -8,20 +8,20 @@ import { db } from '@/lib/firebase/config';
 
 /**
  * Restoranın çalışma saatlerine göre otomatik açık/kapalı durumunu yöneten hook
- * Manuel açık ise otomatik kapanış yapmaz
+ * openingHours'a göre otomatik açar/kapar
  */
-export function useAutoRestaurantStatus(restaurant: Restaurant | null, isManuallyClosed: boolean = false, isManualOpen: boolean = false) {
+export function useAutoRestaurantStatus(restaurant: Restaurant | null) {
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    if (!restaurant?.openingHours || !restaurant.id || isManualOpen) return;
+    if (!restaurant?.openingHours || !restaurant.id) return;
 
     const checkAndUpdateStatus = async () => {
       try {
         const shouldBeOpen = isRestaurantOpenBasedOnHours(restaurant.openingHours!);
-        console.log(`Hook: Restoran açık: ${restaurant.isOpen}, saatlere göre açık olmalı: ${shouldBeOpen}, manuel kapalı: ${isManuallyClosed}, manuel açık: ${isManualOpen}`);
+        console.log(`Hook: Restoran şu an açık: ${restaurant.isOpen}, saatlere göre açık olmalı: ${shouldBeOpen}`);
 
-        // Açma her zaman (manuel açık olsa bile saatlere göre aç)
+        // Açma: Eğer saatlere göre açık olmalı ama şu an kapalıysa aç
         if (shouldBeOpen && !restaurant.isOpen) {
           setIsUpdating(true);
 
@@ -34,8 +34,8 @@ export function useAutoRestaurantStatus(restaurant: Restaurant | null, isManuall
           console.log(`Restoran ${restaurant.name} saatlere göre otomatik olarak açıldı`);
         }
 
-        // Kapanış manuel açık değilse
-        if (!isManualOpen && !shouldBeOpen && restaurant.isOpen) {
+        // Kapanış: Eğer saatlere göre kapalı olmalı ama şu an açıksa kapat
+        if (!shouldBeOpen && restaurant.isOpen) {
           setIsUpdating(true);
 
           const restaurantRef = doc(db, 'shops', restaurant.id);
@@ -56,11 +56,11 @@ export function useAutoRestaurantStatus(restaurant: Restaurant | null, isManuall
     // İlk kontrol - hemen çalış
     checkAndUpdateStatus();
 
-    // Her saniye kontrol et - kapanış saatinde hemen kapatmak için
-    const interval = setInterval(checkAndUpdateStatus, 1000); // 1 saniye
+    // Her dakika kontrol et - kapanış saatinde kapatmak için
+    const interval = setInterval(checkAndUpdateStatus, 60000); // 1 dakika
 
     return () => clearInterval(interval);
-  }, [restaurant, isManuallyClosed, isManualOpen]); // restaurant, isManuallyClosed veya isManualOpen değiştiğinde çalış
+  }, [restaurant]); // Sadece restaurant değiştiğinde çalış
 
   return { isUpdating };
 }

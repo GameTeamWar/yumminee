@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getRestaurantByOwnerId, updateRestaurant, uploadRestaurantLogo, Shop, deleteField } from '@/lib/firebase/db';
+import { db } from '@/lib/firebase/config';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { toast } from 'sonner';
 
 export default function SettingsPage() {
@@ -154,6 +156,30 @@ export default function SettingsPage() {
 
     loadRestaurantData();
   }, [user?.uid]);
+
+  // Çalışma saatleri için ayrı onSnapshot listener
+  useEffect(() => {
+    if (!restaurant?.id) return;
+
+    const restaurantRef = doc(db, 'shops', restaurant.id);
+    const unsubscribe = onSnapshot(restaurantRef, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        if (data.openingHours) {
+          console.log('Settings: Çalışma saatleri güncellendi:', data.openingHours);
+          setWorkingHours(data.openingHours);
+          
+          // Restaurant durumunu da güncelle
+          const shouldBeOpen = calculateRestaurantOpenStatus(data.openingHours);
+          setRestaurant(prev => prev ? { ...prev, isOpen: shouldBeOpen, openingHours: data.openingHours } : null);
+        }
+      }
+    }, (error) => {
+      console.error('Settings: Çalışma saatleri dinlenirken hata:', error);
+    });
+
+    return () => unsubscribe();
+  }, [restaurant?.id]);
 
   // Restoran açık/kapalı durumunu çalışma saatlerine göre hesapla
   const calculateRestaurantOpenStatus = (hours: typeof workingHours): boolean => {
