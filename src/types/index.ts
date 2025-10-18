@@ -20,13 +20,14 @@ export type UserRole = 'customer' | 'shop' | 'courier' | 'admin';
 
 // Çalışma saatleri tipi
 export interface WorkingHours {
-  monday: { open: string; close: string; isOpen: boolean };
-  tuesday: { open: string; close: string; isOpen: boolean };
-  wednesday: { open: string; close: string; isOpen: boolean };
-  thursday: { open: string; close: string; isOpen: boolean };
-  friday: { open: string; close: string; isOpen: boolean };
-  saturday: { open: string; close: string; isOpen: boolean };
-  sunday: { open: string; close: string; isOpen: boolean };
+  [key: string]: { open: string; close: string; isClosed: boolean };
+  monday: { open: string; close: string; isClosed: boolean };
+  tuesday: { open: string; close: string; isClosed: boolean };
+  wednesday: { open: string; close: string; isClosed: boolean };
+  thursday: { open: string; close: string; isClosed: boolean };
+  friday: { open: string; close: string; isClosed: boolean };
+  saturday: { open: string; close: string; isClosed: boolean };
+  sunday: { open: string; close: string; isClosed: boolean };
 }
 
 // Shop tipi

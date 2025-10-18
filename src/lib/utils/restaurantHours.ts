@@ -17,7 +17,7 @@ export function isRestaurantOpenBasedOnHours(workingHours: WorkingHours): boolea
   const todayHours = workingHours[todayKey];
 
   // Eğer bugün kapalıysa veya veri yoksa false döndür
-  if (!todayHours || !todayHours.isOpen) {
+  if (!todayHours || todayHours.isClosed) {
     return false;
   }
 
@@ -51,7 +51,7 @@ export function formatWorkingHours(workingHours: WorkingHours): string {
 
   const todayHours = workingHours[todayKey];
 
-  if (!todayHours || !todayHours.isOpen) {
+  if (!todayHours || todayHours.isClosed) {
     return 'Bugün Kapalı';
   }
 
@@ -73,7 +73,7 @@ export function formatAllWorkingHours(workingHours: WorkingHours): string {
     const dayHours = workingHours[dayKey as keyof WorkingHours];
     const dayName = dayNames[index];
 
-    if (!dayHours || !dayHours.isOpen) {
+    if (!dayHours || dayHours.isClosed) {
       formattedHours.push(`${dayName}: Kapalı`);
     } else {
       formattedHours.push(`${dayName}: ${dayHours.open} - ${dayHours.close}`);
@@ -97,7 +97,7 @@ export function getNextOpeningTime(workingHours: WorkingHours): Date | null {
   const todayKey = days[currentDay] as keyof WorkingHours;
   const todayHours = workingHours[todayKey];
 
-  if (todayHours && todayHours.isOpen) {
+  if (todayHours && !todayHours.isClosed) {
     const [openHour, openMinute] = todayHours.open.split(':').map(Number);
     const openingTime = new Date(now);
     openingTime.setHours(openHour, openMinute, 0, 0);
@@ -113,7 +113,7 @@ export function getNextOpeningTime(workingHours: WorkingHours): Date | null {
     const checkDayKey = days[checkDay] as keyof WorkingHours;
     const checkDayHours = workingHours[checkDayKey];
 
-    if (checkDayHours && checkDayHours.isOpen) {
+    if (checkDayHours && !checkDayHours.isClosed) {
       const [openHour, openMinute] = checkDayHours.open.split(':').map(Number);
       const openingTime = new Date(now);
       openingTime.setDate(now.getDate() + i);

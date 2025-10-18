@@ -202,8 +202,17 @@ export default function RestaurantSidebar() {
         // Kapatma modal'ını aç
         setIsCloseModalOpen(true);
       } else {
-        // Aç - doğrudan Firebase'e kaydet
-        await updateRestaurant(restaurant.id, { isOpen: true });
+        // Aç - openingHours'ta bugünün isClosed = false yap
+        const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
+        const updatedHours = { ...restaurant.openingHours };
+        if (updatedHours[today]) {
+          updatedHours[today].isClosed = false;
+        }
+        
+        await updateRestaurant(restaurant.id, { 
+          isOpen: true, 
+          openingHours: updatedHours 
+        });
         setIsOpen(true);
         setIsManuallyClosed(false); // Manuel açıldığında otomatik sistemi tekrar aktif et
         toast.success('Restoran açıldı');
@@ -220,6 +229,8 @@ export default function RestaurantSidebar() {
         toast.error('Restoran bilgileri bulunamadı');
         return;
       }
+
+      const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
 
       if (selectedCloseOption.startsWith('temp-')) {
         // Kısa süreli kapatma
@@ -240,8 +251,22 @@ export default function RestaurantSidebar() {
         setTemporaryCloseTimer(timer);
 
         toast.success(`${minutes} dakika sonra otomatik açılacak`);
-      } else {
-        // Manuel kapatma
+      } else if (selectedCloseOption === 'manual-close') {
+        // Manuel kapat: openingHours'ta bugünün isClosed = true
+        const updatedHours = { ...restaurant.openingHours };
+        if (updatedHours[today]) {
+          updatedHours[today].isClosed = true;
+        }
+        
+        await updateRestaurant(restaurant.id, { 
+          isOpen: false, 
+          openingHours: updatedHours 
+        });
+        setIsOpen(false);
+        setIsManuallyClosed(true);
+        toast.success('Restoran kapatıldı');
+      } else if (selectedCloseOption === 'auto-open') {
+        // Saatlere göre aç: sadece kapat, hook açacak
         await updateRestaurant(restaurant.id, { isOpen: false });
         setIsOpen(false);
         setIsManuallyClosed(true);
@@ -259,7 +284,16 @@ export default function RestaurantSidebar() {
   const handleAutoOpenRestaurant = async () => {
     try {
       if (restaurant) {
-        await updateRestaurant(restaurant.id, { isOpen: true });
+        const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
+        const updatedHours = { ...restaurant.openingHours };
+        if (updatedHours[today]) {
+          updatedHours[today].isClosed = false;
+        }
+        
+        await updateRestaurant(restaurant.id, { 
+          isOpen: true, 
+          openingHours: updatedHours 
+        });
         setIsOpen(true);
         setIsManuallyClosed(false);
         setTemporaryCloseTimer(null);
@@ -428,18 +462,18 @@ export default function RestaurantSidebar() {
               <RadioGroup value={selectedCloseOption} onValueChange={setSelectedCloseOption}>
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="manual-open" id="manual-open" />
-                    <Label htmlFor="manual-open" className="flex-1 cursor-pointer">
-                      <div className="font-medium">Manuel Aç</div>
-                      <div className="text-xs text-gray-500">Paneli kendim açacağım</div>
+                    <RadioGroupItem value="manual-close" id="manual-close" />
+                    <Label htmlFor="manual-close" className="flex-1 cursor-pointer">
+                      <div className="font-medium">Manuel Kapat</div>
+                      <div className="text-xs text-gray-500">Restoranı kapat, kendim açacağım</div>
                     </Label>
                   </div>
 
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="auto-open" id="auto-open" />
                     <Label htmlFor="auto-open" className="flex-1 cursor-pointer">
-                      <div className="font-medium">Otomatik Aç</div>
-                      <div className="text-xs text-gray-500">Çalışma saatlerine göre</div>
+                      <div className="font-medium">Saatlere Göre Aç</div>
+                      <div className="text-xs text-gray-500">Çalışma saatlerine göre aç</div>
                     </Label>
                   </div>
                 </div>
