@@ -1,14 +1,15 @@
+// src/components/RestaurantCard.tsx
 import Link from 'next/link';
 import { useState, useEffect, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
-import { Star, Clock, MapPin, AlertCircle } from 'lucide-react';
+import { Star, Clock, MapPin, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Restaurant } from '@/types';
 import { isRestaurantOpenBasedOnHours } from '@/lib/utils/restaurantHours';
 import { updateRestaurant } from '@/lib/firebase/db';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import type { Product } from '@/lib/firebase/db';
-import RestaurantCardClient from './RestaurantCardClient';
+import { useRestaurant } from '@/contexts/RestaurantContext';
 
 interface RestaurantCardProps {
   restaurant: Restaurant;
@@ -18,6 +19,8 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
   const hasPromotion = restaurant.rating >= 4.5;
   const [hasActiveProducts, setHasActiveProducts] = useState(true);
   const [productsWithOptions, setProductsWithOptions] = useState(0);
+  const { getRemainingTime, updateRemainingTime } = useRestaurant();
+  const remainingTime = getRemainingTime(restaurant.id);
   
   // Ürün kontrolü yap (Real-time)
   useEffect(() => {
@@ -34,22 +37,6 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
       const activeAndAvailableProducts = products.filter(p => p.isAvailable);
       const productsWithOptionsCount = activeAndAvailableProducts.filter(p => p.options && p.options.length > 0).length;
       
-      console.log('🔍 RestaurantCard Ürün kontrolü (Real-time):', {
-        restaurantId: restaurant.id,
-        totalProducts: products.length,
-        availableProducts: activeAndAvailableProducts.length,
-        productsWithOptions: productsWithOptionsCount,
-        products: products.map(p => ({ id: p.id, name: p.name, isAvailable: p.isAvailable, optionsCount: p.options?.length || 0 }))
-      });
-      
-      // Detaylı ürün listesi
-      console.table(products.map(p => ({ 
-        'Ürün Adı': p.name, 
-        'Mevcut': p.isAvailable ? '✅' : '❌',
-        'Opsiyon Sayısı': p.options?.length || 0,
-        'ID': p.id.substring(0, 8) + '...'
-      })));
-      
       setHasActiveProducts(activeAndAvailableProducts.length > 0);
       setProductsWithOptions(productsWithOptionsCount);
     }, (error) => {
@@ -59,38 +46,27 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
     return unsubscribe;
   }, [restaurant?.id]);
   
-  // Geçici kapanma süresini hesapla
-  const remainingTime = useMemo(() => {
-    if (!restaurant?.tempCloseEndTime) return 0;
-    const endTime = restaurant.tempCloseEndTime;
-    const now = Math.floor(Date.now() / 1000);
-    const remaining = endTime - now;
-    return remaining > 0 ? remaining : 0;
-  }, [restaurant?.tempCloseEndTime]);
-  
-  // Geri sayımı güncelle
+  // Geçici kapanma süresini hesapla ve global state'e ata
   useEffect(() => {
-    if (remainingTime > 0) {
-      const interval = setInterval(() => {
-        const currentRemaining = (() => {
-          if (!restaurant?.tempCloseEndTime) return 0;
-          const endTime = restaurant.tempCloseEndTime;
-          const now = Math.floor(Date.now() / 1000);
-          const remaining = endTime - now;
-          return remaining > 0 ? remaining : 0;
-        })();
-        
-        if (currentRemaining <= 1 && restaurant?.tempCloseEndTime) {
-          updateRestaurant(restaurant.id, {
-            tempCloseEndTime: null,
-            tempCloseOption: null
-          }).catch(console.error);
-        }
-      }, 1000);
-
-      return () => clearInterval(interval);
+    if (!restaurant?.tempCloseEndTime) {
+      updateRemainingTime(restaurant?.id || '', null);
+      return;
     }
-  }, [remainingTime, restaurant?.id, restaurant?.tempCloseEndTime]);
+    updateRemainingTime(restaurant.id, restaurant.tempCloseEndTime);
+  }, [restaurant?.tempCloseEndTime, restaurant?.id, updateRemainingTime]);  // Süreyi formatla (dakika ve saniye)
+  const formatTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours} saat ${minutes} dk`;
+    } else if (minutes > 0) {
+      return `${minutes} dk ${remainingSeconds} sn`;
+    } else {
+      return `${remainingSeconds} sn`;
+    }
+  };
   
   // Restoranın açık olup olmadığını kontrol et
   const checkIfOpen = (): boolean => {
@@ -114,17 +90,6 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
   
   const isOpen = checkIfOpen();
   
-  // Süreyi formatla
-  const formatTime = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes > 0) {
-      return `${minutes} dk ${remainingSeconds} sn sonra açılır`;
-    } else {
-      return `${remainingSeconds} sn sonra açılır`;
-    }
-  };
-
   // Bir sonraki açılış zamanını hesapla
   const getNextOpeningInfo = (): string | null => {
     // Ürün yoksa özel mesaj
@@ -134,11 +99,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
 
     // Geçici kapanma varsa
     if (remainingTime > 0) {
-      if (restaurant.tempCloseOption && restaurant.tempCloseOption.startsWith('temp-')) {
-        const minutes = parseInt(restaurant.tempCloseOption.split('-')[1]);
-        return `${minutes} dakika sonra açılır`;
-      }
-      return formatTime(remainingTime);
+      return `${formatTime(remainingTime)} içinde açılır`;
     }
     
     if (!restaurant.openingHours || isOpen) return null;
@@ -179,7 +140,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
   // Kapalı badge metnini belirle
   const getClosedBadgeText = (): string => {
     if (!hasActiveProducts) return 'SİSTEM KAPALI';
-    if (remainingTime > 0) return 'GEÇİCİ KAPALI';
+    if (remainingTime > 0) return 'YOĞUNLUK NEDENİYLE GEÇİCİ KAPALI';
     if (!restaurant.openingHours) return 'KAPALI';
     
     const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
@@ -201,6 +162,9 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
     return 'KAPALI';
   };
 
+  // Geçici kapanma durumunu kontrol et
+  const isTempClosed = remainingTime > 0;
+
   return (
     <Link href={`/shops/${restaurant.id}`} className={`block h-full ${!isOpen ? 'pointer-events-none' : ''}`}>
       <Card className={`overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100 rounded-2xl group h-full p-0 ${!isOpen ? 'opacity-70' : ''}`}>
@@ -208,13 +172,19 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
           {/* Kapalı Badge */}
           {!isOpen && (
             <div className="absolute top-3 left-3 z-30">
-              <div className={`px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg ${!hasActiveProducts ? 'bg-gray-800 text-white' : 'bg-red-600 text-white'}`}>
+              <div className={`px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg ${
+                !hasActiveProducts 
+                  ? 'bg-gray-800 text-white' 
+                  : isTempClosed 
+                    ? 'bg-orange-600 text-white'
+                    : 'bg-red-600 text-white'
+              }`}>
                 {getClosedBadgeText()}
               </div>
             </div>
           )}
 
-          {/* Promosyon Banner */}
+          {/* Promosyon Banner - sadece açıksa göster */}
           {hasPromotion && isOpen && (
             <div className="absolute top-0 left-0 right-0 z-20 flex justify-center px-4">
               <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-5 py-2 rounded-full text-sm font-semibold shadow-xl backdrop-blur-sm flex items-center space-x-2">
@@ -231,7 +201,11 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
                 src={restaurant.image}
                 alt={restaurant.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-                style={{ filter: !isOpen ? 'grayscale(100%)' : 'none' }}
+                style={{ 
+                  filter: !isOpen 
+                    ? 'grayscale(100%) brightness(0.8)' 
+                    : 'none' 
+                }}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/images/restaurants/default.jpg';
                 }}
@@ -239,21 +213,27 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
               <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             </>
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-orange-100 to-orange-200 flex items-center justify-center">
+            <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-orange-100 to-orange-200 flex items-center justify-center"
+              style={{ 
+                filter: !isOpen ? 'grayscale(100%) brightness(0.8)' : 'none' 
+              }}
+            >
               <div className="w-20 h-20 rounded-full bg-white/80 flex items-center justify-center shadow-lg">
                 <span className="text-orange-600 font-bold text-3xl">{restaurant.name[0]}</span>
               </div>
             </div>
           )}
 
-          {/* Rating Badge */}
-          <div className="absolute bottom-4 left-4 z-10">
-            <div className="bg-green-600 text-white px-4 py-2 rounded-xl shadow-xl backdrop-blur-sm flex items-center space-x-1.5 group-hover:bg-green-700 transition-colors duration-300">
-              <Star className="h-4 w-4 fill-white" />
-              <span className="text-base font-bold">{restaurant.rating}</span>
-              <span className="text-sm opacity-90">(750+)</span>
+          {/* Rating Badge - sadece açıksa göster */}
+          {isOpen && (
+            <div className="absolute bottom-4 left-4 z-10">
+              <div className="bg-green-600 text-white px-4 py-2 rounded-xl shadow-xl backdrop-blur-sm flex items-center space-x-1.5 group-hover:bg-green-700 transition-colors duration-300">
+                <Star className="h-4 w-4 fill-white" />
+                <span className="text-base font-bold">{restaurant.rating}</span>
+                <span className="text-sm opacity-90">(750+)</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Card Content */}
@@ -282,7 +262,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
                 ))}
               </div>
             ) : null}
-            {productsWithOptions > 0 && (
+            {productsWithOptions > 0 && isOpen && (
               <div className="mt-1">
                 <span className="inline-flex items-center gap-1 text-purple-600 font-medium">
                   <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -297,6 +277,23 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
           {/* Divider */}
           <div className="border-t border-gray-100 mb-3"></div>
 
+          {/* Geçici Kapanma Uyarısı - En üstte ve dikkat çekici */}
+          {isTempClosed && (
+            <div className="mb-4 p-3 bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-300 rounded-lg">
+              <div className="flex items-start space-x-2">
+                <AlertTriangle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5 animate-pulse" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-orange-900 mb-1">
+                    🔥 Yoğunluk Nedeniyle Geçici Kapandı
+                  </p>
+                  <p className="text-xs text-orange-800 font-semibold">
+                    {formatTime(remainingTime)} içinde tekrar açılacak
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Alt Bilgiler */}
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center space-x-4 text-gray-600">
@@ -308,13 +305,19 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
               
               {/* Çalışma Saatleri */}
               {restaurant.serviceRadius && (
-                <span className={`text-xs font-medium ${isOpen ? 'text-green-600' : 'text-red-600'}`}>
+                <span className={`text-xs font-medium ${
+                  isTempClosed 
+                    ? 'text-orange-600' 
+                    : isOpen 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                }`}>
                   {restaurant.openingHours ? renderWorkingHours(restaurant.openingHours) : '08:00-22:00'}
                 </span>
               )}
             </div>
 
-            {/* Minimum Sipariş */}
+            {/* Minimum Sipariş - sadece açıksa göster */}
             {restaurant.minimumOrderAmount !== undefined && restaurant.minimumOrderAmount > 0 && isOpen && (
               <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-lg font-semibold text-sm">
                 Min. {restaurant.minimumOrderAmount} TL
@@ -332,8 +335,23 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
             </div>
           )}
 
-          {/* Kapalı Butonu */}
-          {!isOpen && hasActiveProducts && (
+          {/* Geçici Kapalı Butonu */}
+          {isTempClosed && (
+            <div className="mt-3">
+              <button 
+                disabled 
+                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white px-4 py-3 rounded-lg font-bold text-sm cursor-not-allowed opacity-90 shadow-md"
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <Clock className="h-4 w-4 animate-pulse" />
+                  <span>{formatTime(remainingTime)} içinde açılır</span>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Kapalı Butonu - Geçici kapalı değilse */}
+          {!isOpen && !isTempClosed && hasActiveProducts && (
             <div className="mt-3">
               <button 
                 disabled 
@@ -356,7 +374,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
             </div>
           )}
           
-          {/* Minimum sipariş yok mesajı */}
+          {/* Minimum sipariş yok mesajı - sadece açıksa göster */}
           {isOpen && restaurant.minimumOrderAmount === 0 && (
             <div className="mt-3 flex items-center space-x-1 text-sm text-green-600 font-medium bg-green-50 px-3 py-1.5 rounded-lg w-fit">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -42,6 +42,8 @@ import { toast } from 'sonner';
 import { doc, onSnapshot, collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { useAutoRestaurantStatus } from '@/hooks/useAutoRestaurantStatus';
 import { isRestaurantOpenBasedOnHours } from '@/lib/utils/restaurantHours';
+import { useRestaurant } from '@/contexts/RestaurantContext';
+import { useMemo, useCallback } from 'react';
 
 const menuItems = [
   {
@@ -113,13 +115,16 @@ export default function RestaurantSidebar() {
   const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
   const [selectedCloseOption, setSelectedCloseOption] = useState<string>('');
   const [temporaryCloseTimer, setTemporaryCloseTimer] = useState<NodeJS.Timeout | null>(null);
-  const [remainingTime, setRemainingTime] = useState<number>(0);
   const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null);
   const [isCancelTimerModalOpen, setIsCancelTimerModalOpen] = useState(false);
   const [systemClosedReason, setSystemClosedReason] = useState<string>('');
 
   // Otomatik restoran durumu hook'u
   useAutoRestaurantStatus(restaurant);
+
+  // Global restaurant context
+  const { getRemainingTime, updateRemainingTime } = useRestaurant();
+  const remainingTime = restaurant?.id ? getRemainingTime(restaurant.id) : 0;
 
   // Ürün kontrolü - Aktif ve mevcut ürün var mı? (Real-time)
   useEffect(() => {
@@ -180,33 +185,7 @@ export default function RestaurantSidebar() {
     return unsubscribe;
   }, [restaurant?.id]);
 
-  // Kalan süreyi gerçek zamanlı güncelle
-  useEffect(() => {
-    if (remainingTime > 0) {
-      const interval = setInterval(() => {
-        setRemainingTime(prev => {
-          if (prev <= 1) {
-            // Süre doldu, otomatik aç
-            handleAutoOpenRestaurant();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      setCountdownInterval(interval);
-
-      return () => {
-        clearInterval(interval);
-        setCountdownInterval(null);
-      };
-    } else {
-      if (countdownInterval) {
-        clearInterval(countdownInterval);
-        setCountdownInterval(null);
-      }
-    }
-  }, [remainingTime]);
+  // Kalan süreyi gerçek zamanlı güncelle - kaldırıldı, artık context'te yönetiliyor
 
   // Bugünün çalışma saatlerine göre açık olup olmadığını kontrol et
   const isTodayOpenBySchedule = () => {
@@ -232,14 +211,19 @@ export default function RestaurantSidebar() {
     });
   };
 
-  // Toggle switch'in durumu
-  const isToggleChecked = () => {
+  // Toggle switch'in durumu - memoized
+  const isToggleChecked = useMemo(() => {
     if (!restaurant) return false;
     if (systemClosedReason) return false; // Sistem tarafından kapatıldıysa toggle kapalı
     if (isSeasonallyClosed()) return false;
     if (isTodayManuallyClosed()) return false;
     return isTodayOpenBySchedule();
-  };
+  }, [restaurant, systemClosedReason]);
+
+  // Switch disabled durumu - memoized
+  const isSwitchDisabled = useMemo(() => {
+    return !restaurant || remainingTime > 0 || !!systemClosedReason;
+  }, [restaurant, remainingTime, systemClosedReason]);
 
   // Süreyi formatla
   const formatTime = (seconds: number) => {
@@ -287,21 +271,9 @@ export default function RestaurantSidebar() {
   // Component mount olduğunda veya restaurant değiştiğinde kalan süreyi yükle
   useEffect(() => {
     if (restaurant?.tempCloseEndTime) {
-      const endTime = restaurant.tempCloseEndTime;
-      const now = Math.floor(Date.now() / 1000);
-      const remaining = endTime - now;
-
-      if (remaining > 0) {
-        setRemainingTime(remaining);
-      } else {
-        // Süre dolmuş, Firestore'dan temizle
-        updateRestaurant(restaurant.id, {
-          tempCloseEndTime: null,
-          tempCloseOption: null
-        }).catch(console.error);
-      }
+      updateRemainingTime(restaurant.id, restaurant.tempCloseEndTime);
     } else {
-      setRemainingTime(0);
+      updateRemainingTime(restaurant?.id || '', null);
     }
   }, [restaurant?.id, restaurant?.tempCloseEndTime]);
 
@@ -355,7 +327,7 @@ export default function RestaurantSidebar() {
     setExpandedMenu(expandedMenu === menuTitle ? null : menuTitle);
   };
 
-  const handleToggleRestaurant = async (checked: boolean) => {
+  const handleToggleRestaurant = useCallback(async (checked: boolean) => {
     if (!restaurant) {
       toast.error('Restoran bilgileri bulunamadı');
       return;
@@ -404,7 +376,7 @@ export default function RestaurantSidebar() {
       console.error('Restoran durumu güncellenirken hata:', error);
       toast.error('Restoran durumu güncellenirken bir hata oluştu');
     }
-  };
+  }, [restaurant, systemClosedReason]);
 
   const handleCloseRestaurant = async () => {
     try {
@@ -432,7 +404,7 @@ export default function RestaurantSidebar() {
           tempCloseOption: selectedCloseOption
         });
 
-        setRemainingTime(totalSeconds);
+        updateRemainingTime(restaurant.id, endTime);
 
         toast.success(`${minutes} dakika sonra bugün otomatik açılacak`);
       } else if (selectedCloseOption === 'manual-close') {
@@ -493,7 +465,7 @@ export default function RestaurantSidebar() {
         });
 
         setTemporaryCloseTimer(null);
-        setRemainingTime(0);
+        updateRemainingTime(restaurant.id, null);
         toast.success('Bugün otomatik olarak açıldı');
       }
     } catch (error) {
@@ -516,7 +488,7 @@ export default function RestaurantSidebar() {
         }
 
         // Süreyi sıfırla
-        setRemainingTime(0);
+        updateRemainingTime(restaurant.id, null);
 
         // Restoranı aç
         const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
@@ -643,20 +615,29 @@ export default function RestaurantSidebar() {
                 "w-2 h-2 rounded-full",
                 systemClosedReason ? "bg-red-500 animate-pulse" :
                 remainingTime > 0 ? "bg-orange-500 animate-pulse" :
-                restaurant && isToggleChecked() ? "bg-green-500 animate-pulse" : "bg-red-500 animate-pulse"
+                restaurant && isToggleChecked ? "bg-green-500 animate-pulse" : "bg-red-500 animate-pulse"
               )}></div>
               <span className="text-sm font-medium">
                 {systemClosedReason ? 'Sistem Kapalı' :
                  remainingTime > 0 ? 'Geçici Kapalı' :
-                 restaurant ? (isToggleChecked() ? 'Hizmet Veriyor' : 'Kapalı') : 'Yükleniyor...'}
+                 restaurant ? (isToggleChecked ? 'Hizmet Veriyor' : 'Kapalı') : 'Yükleniyor...'}
               </span>
             </div>
-            <Switch
-              checked={isToggleChecked()}
-              onCheckedChange={handleToggleRestaurant}
-              disabled={!restaurant || remainingTime > 0 || !!systemClosedReason}
-              className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
-            />
+            <button
+              onClick={() => handleToggleRestaurant(!isToggleChecked)}
+              disabled={isSwitchDisabled}
+              className={cn(
+                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50",
+                isToggleChecked ? "bg-green-500" : "bg-red-500"
+              )}
+            >
+              <span
+                className={cn(
+                  "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition-transform",
+                  isToggleChecked ? "translate-x-5" : "translate-x-0"
+                )}
+              />
+            </button>
           </div>
           
           {/* Durum açıklaması */}

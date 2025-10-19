@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,11 +25,13 @@ import {
   Star,
   Filter,
   ChefHat,
-  DollarSign
+  DollarSign,
+  AlertTriangle
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { collection, query, where, onSnapshot, addDoc, doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
+import { updateRestaurant } from '@/lib/firebase/db'
 
 interface Product {
   id: string
@@ -51,7 +53,7 @@ interface Category {
   imageUrl?: string
   isActive: boolean
   sortOrder: number
-  customId?: string // 11-digit unique identifier
+  customId?: string
 }
 
 interface CartItem {
@@ -70,6 +72,9 @@ interface Restaurant {
   deliveryFee: number
   deliveryTime: number
   isOpen: boolean
+  tempCloseEndTime?: number
+  tempCloseOption?: string
+  openingHours?: any
 }
 
 export default function CustomerShopPage() {
@@ -91,16 +96,64 @@ export default function CustomerShopPage() {
     phone: userProfile?.phoneNumber || ''
   })
 
-  // URL'den restaurant ID'yi al
-  const restaurantId = '17607296269' // Gerçek restaurant ID'si
+  const restaurantId = '17607296269'
+
+  // Geçici kapanma süresini hesapla
+  const remainingTime = useMemo(() => {
+    if (!restaurant?.tempCloseEndTime) return 0
+    const endTime = restaurant.tempCloseEndTime
+    const now = Math.floor(Date.now() / 1000)
+    const remaining = endTime - now
+    return remaining > 0 ? remaining : 0
+  }, [restaurant?.tempCloseEndTime])
+
+  // Geri sayımı güncelle
+  useEffect(() => {
+    if (remainingTime > 0) {
+      const interval = setInterval(() => {
+        const currentRemaining = (() => {
+          if (!restaurant?.tempCloseEndTime) return 0
+          const endTime = restaurant.tempCloseEndTime
+          const now = Math.floor(Date.now() / 1000)
+          const remaining = endTime - now
+          return remaining > 0 ? remaining : 0
+        })()
+        
+        if (currentRemaining <= 1 && restaurant?.tempCloseEndTime) {
+          updateRestaurant(restaurant.id, {
+            tempCloseEndTime: null,
+            tempCloseOption: null
+          }).catch(console.error)
+        }
+      }, 1000)
+
+      return () => clearInterval(interval)
+    }
+  }, [remainingTime, restaurant?.id, restaurant?.tempCloseEndTime])
+
+  // Süreyi formatla
+  const formatTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const remainingSeconds = seconds % 60
+    
+    if (hours > 0) {
+      return `${hours} saat ${minutes} dk`
+    } else if (minutes > 0) {
+      return `${minutes} dk ${remainingSeconds} sn`
+    } else {
+      return `${remainingSeconds} sn`
+    }
+  }
+
+  // Geçici kapanma durumu
+  const isTempClosed = remainingTime > 0
 
   useEffect(() => {
     if (!restaurantId) return
 
-    // Restoran bilgilerini yükle
     const loadRestaurant = async () => {
       try {
-        // Demo data - gerçek uygulamada Firebase'den gelecek
         const demoRestaurant: Restaurant = {
           id: restaurantId,
           name: 'Lezzet Durağı',
@@ -119,7 +172,6 @@ export default function CustomerShopPage() {
       }
     }
 
-    // Kategorileri yükle
     const categoriesQuery = query(
       collection(db, 'categories'),
       where('restaurantId', '==', restaurantId)
@@ -130,18 +182,16 @@ export default function CustomerShopPage() {
       snapshot.forEach((doc) => {
         categoriesData.push({ id: doc.id, ...doc.data() } as Category)
       })
-      // Use customId for category identification if available, fallback to doc.id
       const processedCategories = categoriesData
         .filter(cat => cat.isActive)
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map(cat => ({
           ...cat,
-          displayId: cat.customId || cat.id // Use customId for display/filtering
+          displayId: cat.customId || cat.id
         }))
       setCategories(processedCategories)
     })
 
-    // Ürünleri yükle
     const productsQuery = query(
       collection(db, 'products'),
       where('restaurantId', '==', restaurantId)
@@ -153,7 +203,6 @@ export default function CustomerShopPage() {
         productsData.push({ id: doc.id, ...doc.data() } as Product)
       })
 
-      // Filter products to only show those with active categories or no category
       const activeCategoryIds = categories.map(cat => cat.customId || cat.id)
       const filteredProducts = productsData.filter(product =>
         product.isAvailable && (!product.categoryId || activeCategoryIds.includes(product.categoryId))
@@ -182,6 +231,11 @@ export default function CustomerShopPage() {
   })
 
   const addToCart = (product: Product) => {
+    if (isTempClosed) {
+      toast.error('Restoran yoğunluk nedeniyle geçici olarak kapalı')
+      return
+    }
+
     const existingItem = cart.find(item => item.product.id === product.id)
     if (existingItem) {
       setCart(cart.map(item =>
@@ -223,6 +277,11 @@ export default function CustomerShopPage() {
   }
 
   const handleOrderSubmit = async () => {
+    if (isTempClosed) {
+      toast.error('Restoran yoğunluk nedeniyle geçici olarak kapalı')
+      return
+    }
+
     if (!user || !restaurant) {
       toast.error('Sipariş verebilmek için giriş yapmanız gerekir')
       return
@@ -301,11 +360,41 @@ export default function CustomerShopPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Restaurant Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className={`bg-white shadow-sm border-b ${isTempClosed ? 'opacity-80' : ''}`}>
         <div className="container mx-auto px-4 py-6">
+          {/* Geçici Kapanma Uyarısı */}
+          {isTempClosed && (
+            <div className="mb-4 p-4 bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-300 rounded-lg">
+              <div className="flex items-start space-x-3">
+                <AlertTriangle className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5 animate-pulse" />
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-orange-900 mb-1">
+                    🔥 Yoğunluk Nedeniyle Geçici Kapandı
+                  </h3>
+                  <p className="text-sm text-orange-800 font-semibold mb-2">
+                    Restoran şu anda çok yoğun olduğu için geçici olarak sipariş almayı durdurdu
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <Clock className="h-5 w-5 text-orange-700" />
+                    <p className="text-base font-bold text-orange-900">
+                      {formatTime(remainingTime)} içinde tekrar açılacak
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{restaurant.name}</h1>
+              <div className="flex items-center space-x-3">
+                <h1 className="text-2xl font-bold text-gray-900">{restaurant.name}</h1>
+                {isTempClosed && (
+                  <Badge className="bg-orange-600 text-white px-3 py-1 text-sm font-bold">
+                    GEÇİCİ KAPALI
+                  </Badge>
+                )}
+              </div>
               <p className="text-gray-600">{restaurant.description}</p>
               <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                 <div className="flex items-center gap-1">
@@ -346,9 +435,10 @@ export default function CustomerShopPage() {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
+                    disabled={isTempClosed}
                   />
                 </div>
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory} disabled={isTempClosed}>
                   <SelectTrigger className="w-48">
                     <Filter className="h-4 w-4 mr-2" />
                     <SelectValue placeholder="Kategori seçin" />
@@ -372,6 +462,7 @@ export default function CustomerShopPage() {
                 variant={selectedCategory === 'all' ? 'default' : 'outline'}
                 onClick={() => setSelectedCategory('all')}
                 className="whitespace-nowrap"
+                disabled={isTempClosed}
               >
                 Tümü
               </Button>
@@ -379,6 +470,7 @@ export default function CustomerShopPage() {
                 variant={selectedCategory === 'uncategorized' ? 'default' : 'outline'}
                 onClick={() => setSelectedCategory('uncategorized')}
                 className="whitespace-nowrap"
+                disabled={isTempClosed}
               >
                 Kategorisiz
               </Button>
@@ -388,6 +480,7 @@ export default function CustomerShopPage() {
                   variant={selectedCategory === (category.customId || category.id) ? 'default' : 'outline'}
                   onClick={() => setSelectedCategory(category.customId || category.id)}
                   className="whitespace-nowrap"
+                  disabled={isTempClosed}
                 >
                   {category.name}
                 </Button>
@@ -397,8 +490,18 @@ export default function CustomerShopPage() {
             {/* Products */}
             <div className="grid gap-4 md:grid-cols-2">
               {filteredProducts.map((product) => (
-                <Card key={product.id} className="hover:shadow-md transition-shadow">
+                <Card key={product.id} className={`hover:shadow-md transition-shadow ${isTempClosed ? 'opacity-60' : ''}`}>
                   <CardContent className="p-4">
+                    {product.imageUrl && (
+                      <div className="mb-3 rounded-lg overflow-hidden">
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-full h-40 object-cover"
+                          style={{ filter: isTempClosed ? 'grayscale(100%) brightness(0.8)' : 'none' }}
+                        />
+                      </div>
+                    )}
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg">{product.name}</h3>
@@ -422,10 +525,19 @@ export default function CustomerShopPage() {
                     <Button
                       onClick={() => addToCart(product)}
                       className="w-full"
-                      disabled={!restaurant.isOpen}
+                      disabled={isTempClosed}
                     >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Sepete Ekle
+                      {isTempClosed ? (
+                        <>
+                          <Clock className="h-4 w-4 mr-2" />
+                          Geçici Kapalı
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Sepete Ekle
+                        </>
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
@@ -468,6 +580,7 @@ export default function CustomerShopPage() {
                               size="sm"
                               variant="outline"
                               onClick={() => updateCartItemQuantity(item.product.id, item.quantity - 1)}
+                              disabled={isTempClosed}
                             >
                               <Minus className="h-3 w-3" />
                             </Button>
@@ -476,6 +589,7 @@ export default function CustomerShopPage() {
                               size="sm"
                               variant="outline"
                               onClick={() => updateCartItemQuantity(item.product.id, item.quantity + 1)}
+                              disabled={isTempClosed}
                             >
                               <Plus className="h-3 w-3" />
                             </Button>
@@ -485,6 +599,7 @@ export default function CustomerShopPage() {
                             variant="ghost"
                             onClick={() => removeFromCart(item.product.id)}
                             className="text-red-500 hover:text-red-700"
+                            disabled={isTempClosed}
                           >
                             ✕
                           </Button>
@@ -507,13 +622,24 @@ export default function CustomerShopPage() {
                       </div>
                     </div>
 
+                    {isTempClosed && (
+                      <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                        <div className="flex items-start space-x-2">
+                          <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-orange-800">
+                            Restoran geçici olarak kapalı. {formatTime(remainingTime)} sonra sipariş verebilirsiniz.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     <Dialog open={isOrderDialogOpen} onOpenChange={setIsOrderDialogOpen}>
                       <DialogTrigger asChild>
                         <Button
                           className="w-full"
-                          disabled={!restaurant.isOpen || total < (restaurant.minimumOrderAmount || 0)}
+                          disabled={isTempClosed || total < (restaurant.minimumOrderAmount || 0)}
                         >
-                          Sipariş Ver
+                          {isTempClosed ? 'Geçici Kapalı' : 'Sipariş Ver'}
                         </Button>
                       </DialogTrigger>
                       <DialogContent className="max-w-md">

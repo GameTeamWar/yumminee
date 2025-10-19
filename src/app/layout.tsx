@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
 import { FavoriteProvider } from '@/contexts/FavoriteContext';
+import { RestaurantProvider } from '@/contexts/RestaurantContext';
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -33,12 +34,14 @@ export default function RootLayout({
         suppressHydrationWarning={true}
       >
         <AuthProvider>
-          <CartProvider>
-            <FavoriteProvider>
-              {children}
-              <Toaster />
-            </FavoriteProvider>
-          </CartProvider>
+          <RestaurantProvider>
+            <CartProvider>
+              <FavoriteProvider>
+                {children}
+                <Toaster />
+              </FavoriteProvider>
+            </CartProvider>
+          </RestaurantProvider>
         </AuthProvider>
       </body>
     </html>
