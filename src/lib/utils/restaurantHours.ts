@@ -115,15 +115,84 @@ export function getRestaurantStatus(restaurant: { openingHours?: WorkingHours; i
   nextOpeningTime?: Date;
   statusText: string;
 } {
-  // Eğer manuel olarak açık/kapalı durumu varsa onu kullan
+  // Eğer manuel olarak açık/kapalı durumu varsa onu kullan (genel toggle)
   if (restaurant.isOpen !== undefined) {
+    // Genel olarak kapalıysa, hangi nedenle olursa olsun kapalı
+    if (!restaurant.isOpen) {
+      return {
+        isOpen: false,
+        statusText: 'Kapalı'
+      };
+    }
+
+    // Genel olarak açıksa, günlük kapanış durumunu kontrol et
+    if (restaurant.openingHours) {
+      const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
+      const todayHours = restaurant.openingHours[today as keyof WorkingHours];
+
+      // Eğer bugün manuel kapalıysa
+      if (todayHours?.isClosed) {
+        // Yarın kontrol et
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowDay = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(tomorrow).toLowerCase();
+        const tomorrowHours = restaurant.openingHours[tomorrowDay as keyof WorkingHours];
+
+        if (tomorrowHours && !tomorrowHours.isClosed) {
+          const nextOpening = new Date(tomorrow);
+          const [openHour, openMinute] = tomorrowHours.open.split(':').map(Number);
+          nextOpening.setHours(openHour, openMinute, 0, 0);
+
+          return {
+            isOpen: false,
+            nextOpeningTime: nextOpening,
+            statusText: 'Kapalı'
+          };
+        }
+
+        return {
+          isOpen: false,
+          statusText: 'Kapalı'
+        };
+      }
+
+      // Çalışma saatlerine göre kontrol et
+      const isOpenByHours = isRestaurantOpenBasedOnHours(restaurant.openingHours);
+
+      if (isOpenByHours) {
+        return {
+          isOpen: true,
+          statusText: 'Açık'
+        };
+      }
+
+      // Kapalıysa, bugün tekrar açılacak mı kontrol et
+      if (todayHours && todayHours.open && todayHours.close) {
+        const nextOpening = new Date();
+        const [openHour, openMinute] = todayHours.open.split(':').map(Number);
+        nextOpening.setHours(openHour, openMinute, 0, 0);
+
+        // Eğer bugünkü açılış saati geçmişteyse, yarını kontrol et
+        if (nextOpening <= new Date()) {
+          nextOpening.setDate(nextOpening.getDate() + 1);
+        }
+
+        return {
+          isOpen: false,
+          nextOpeningTime: nextOpening,
+          statusText: 'Kapalı'
+        };
+      }
+    }
+
+    // Genel olarak açık ve çalışma saatleri yoksa
     return {
-      isOpen: restaurant.isOpen,
-      statusText: restaurant.isOpen ? 'Açık' : 'Kapalı'
+      isOpen: true,
+      statusText: 'Açık'
     };
   }
 
-  // Eğer çalışma saatleri yoksa varsayılan olarak açık kabul et
+  // Eğer genel durum belirtilmemişse, çalışma saatlerine göre kontrol et
   if (!restaurant.openingHours) {
     return {
       isOpen: true,
@@ -142,26 +211,8 @@ export function getRestaurantStatus(restaurant: { openingHours?: WorkingHours; i
     };
   }
 
-  // Eğer bugün manuel kapalıysa
+  // Eğer bugün kapalıysa
   if (todayHours.isClosed) {
-    // Yarın kontrol et
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowDay = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(tomorrow).toLowerCase();
-    const tomorrowHours = restaurant.openingHours[tomorrowDay as keyof WorkingHours];
-
-    if (tomorrowHours && !tomorrowHours.isClosed) {
-      const nextOpening = new Date(tomorrow);
-      const [openHour, openMinute] = tomorrowHours.open.split(':').map(Number);
-      nextOpening.setHours(openHour, openMinute, 0, 0);
-
-      return {
-        isOpen: false,
-        nextOpeningTime: nextOpening,
-        statusText: 'Kapalı'
-      };
-    }
-
     return {
       isOpen: false,
       statusText: 'Kapalı'
@@ -178,24 +229,6 @@ export function getRestaurantStatus(restaurant: { openingHours?: WorkingHours; i
     };
   }
 
-  // Kapalıysa, bugün tekrar açılacak mı kontrol et
-  if (todayHours.open && todayHours.close) {
-    const nextOpening = new Date();
-    const [openHour, openMinute] = todayHours.open.split(':').map(Number);
-    nextOpening.setHours(openHour, openMinute, 0, 0);
-
-    // Eğer bugünkü açılış saati geçmişteyse, yarını kontrol et
-    if (nextOpening <= new Date()) {
-      nextOpening.setDate(nextOpening.getDate() + 1);
-    }
-
-    return {
-      isOpen: false,
-      nextOpeningTime: nextOpening,
-      statusText: 'Kapalı'
-    };
-  }
-
   return {
     isOpen: false,
     statusText: 'Kapalı'
@@ -209,11 +242,12 @@ export function formatWorkingHours(workingHours: WorkingHours): string {
   const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
   const todayHours = workingHours[today as keyof WorkingHours];
 
-  if (!todayHours || todayHours.isClosed) {
-    return 'Kapalı';
+  // Kapalı yazma, sadece saat aralığını göster
+  if (todayHours && todayHours.open && todayHours.close) {
+    return `${todayHours.open}-${todayHours.close}`;
   }
 
-  return `${todayHours.open}-${todayHours.close}`;
+  return '08:00-22:00';
 }
 
 /**
