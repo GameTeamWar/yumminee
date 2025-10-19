@@ -223,22 +223,22 @@ export default function RestaurantSidebar() {
 
   // Component mount olduğunda localStorage'dan kalan süreyi yükle
   useEffect(() => {
-    if (restaurant?.id) {
-      const storedEndTime = localStorage.getItem(`tempClose_${restaurant.id}`);
-      if (storedEndTime) {
-        const endTime = parseInt(storedEndTime);
-        const now = Math.floor(Date.now() / 1000);
-        const remaining = endTime - now;
+    if (restaurant?.tempCloseEndTime) {
+      const endTime = restaurant.tempCloseEndTime;
+      const now = Math.floor(Date.now() / 1000);
+      const remaining = endTime - now;
 
-        if (remaining > 0) {
-          setRemainingTime(remaining);
-        } else {
-          // Süre dolmuş, temizle
-          localStorage.removeItem(`tempClose_${restaurant.id}`);
-        }
+      if (remaining > 0) {
+        setRemainingTime(remaining);
+      } else {
+        // Süre dolmuş, Firestore'dan temizle
+        updateRestaurant(restaurant.id, {
+          tempCloseEndTime: null,
+          tempCloseOption: null
+        }).catch(console.error);
       }
     }
-  }, [restaurant?.id]);
+  }, [restaurant?.id, restaurant?.tempCloseEndTime]);
 
   // Component unmount olduğunda timer'ları temizle
   useEffect(() => {
@@ -354,11 +354,12 @@ export default function RestaurantSidebar() {
         }
 
         await updateRestaurant(restaurant.id, {
-          openingHours: updatedHours
+          openingHours: updatedHours,
+          tempCloseEndTime: endTime,
+          tempCloseOption: selectedCloseOption
         });
 
         setRemainingTime(totalSeconds);
-        localStorage.setItem(`tempClose_${restaurant.id}`, endTime.toString());
 
         // Otomatik açılma için timer ayarla
         const timer = setTimeout(async () => {
@@ -416,12 +417,13 @@ export default function RestaurantSidebar() {
         }
 
         await updateRestaurant(restaurant.id, {
-          openingHours: updatedHours
+          openingHours: updatedHours,
+          tempCloseEndTime: null,
+          tempCloseOption: null
         });
 
         setTemporaryCloseTimer(null);
         setRemainingTime(0);
-        localStorage.removeItem(`tempClose_${restaurant.id}`);
         toast.success('Bugün otomatik olarak açıldı');
       }
     } catch (error) {
@@ -445,7 +447,6 @@ export default function RestaurantSidebar() {
 
         // Süreyi sıfırla
         setRemainingTime(0);
-        localStorage.removeItem(`tempClose_${restaurant.id}`);
 
         // Restoranı aç
         const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
@@ -455,7 +456,9 @@ export default function RestaurantSidebar() {
         }
 
         await updateRestaurant(restaurant.id, {
-          openingHours: updatedHours
+          openingHours: updatedHours,
+          tempCloseEndTime: null,
+          tempCloseOption: null
         });
 
         toast.success('Otomatik açılma süresi iptal edildi - restoran açıldı');

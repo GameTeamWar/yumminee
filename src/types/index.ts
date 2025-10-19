@@ -53,6 +53,9 @@ export interface Shop {
   isOpen: boolean;
   ownerId: string; // Shop sahibi
   openingHours?: WorkingHours; // Çalışma saatleri
+  // Geçici kapanma bilgileri
+  tempCloseEndTime?: number; // Unix timestamp
+  tempCloseOption?: string; // 'temp-15', 'temp-30' vb.
   // Yeni eklenen alanlar
   website?: string;
   socialMedia?: {

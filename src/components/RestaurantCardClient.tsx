@@ -1,53 +1,80 @@
+"use client";
+
 import Link from 'next/link';
-import { useState, useEffect, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
-import { Star, Clock, MapPin } from 'lucide-react';
+import { Star, Clock } from 'lucide-react';
 import { Restaurant } from '@/types';
 import { isRestaurantOpenBasedOnHours } from '@/lib/utils/restaurantHours';
-import { updateRestaurant } from '@/lib/firebase/db';
-import RestaurantCardClient from './RestaurantCardClient';
+import { useState, useEffect } from 'react';
 
-interface RestaurantCardProps {
+interface RestaurantCardClientProps {
   restaurant: Restaurant;
 }
 
-const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
-  // Kampanya/promosyon varsa göster
+const RestaurantCardClient = ({ restaurant }: RestaurantCardClientProps) => {
   const hasPromotion = restaurant.rating >= 4.5;
+  const [remainingTime, setRemainingTime] = useState<number>(0);
+  const [mounted, setMounted] = useState(false);
   
-  // Geçici kapanma süresini hesapla
-  const remainingTime = useMemo(() => {
-    if (!restaurant?.tempCloseEndTime) return 0;
-    const endTime = restaurant.tempCloseEndTime;
-    const now = Math.floor(Date.now() / 1000);
-    const remaining = endTime - now;
-    return remaining > 0 ? remaining : 0;
-  }, [restaurant?.tempCloseEndTime]);
+  // Component mount kontrolü
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
-  // Geri sayımı güncelle - süresi dolduğunda Firestore'dan temizle
+  // Geçici kapanma süresini kontrol et
+  useEffect(() => {
+    if (!mounted || !restaurant?.id) return;
+    
+    const checkTempClose = () => {
+      const storedEndTime = localStorage.getItem(`tempClose_${restaurant.id}`);
+      if (storedEndTime) {
+        const endTime = parseInt(storedEndTime);
+        const now = Math.floor(Date.now() / 1000);
+        const remaining = endTime - now;
+
+        if (remaining > 0) {
+          setRemainingTime(remaining);
+        } else {
+          localStorage.removeItem(`tempClose_${restaurant.id}`);
+          setRemainingTime(0);
+        }
+      } else {
+        setRemainingTime(0);
+      }
+    };
+    
+    checkTempClose();
+    
+    // Her 500ms'de bir kontrol et (daha responsive)
+    const checkInterval = setInterval(checkTempClose, 500);
+    
+    return () => clearInterval(checkInterval);
+  }, [restaurant?.id, mounted]);
+
+  // Geri sayımı güncelle
   useEffect(() => {
     if (remainingTime > 0) {
       const interval = setInterval(() => {
-        const currentRemaining = (() => {
-          if (!restaurant?.tempCloseEndTime) return 0;
-          const endTime = restaurant.tempCloseEndTime;
+        const storedEndTime = localStorage.getItem(`tempClose_${restaurant.id}`);
+        if (storedEndTime) {
+          const endTime = parseInt(storedEndTime);
           const now = Math.floor(Date.now() / 1000);
           const remaining = endTime - now;
-          return remaining > 0 ? remaining : 0;
-        })();
-        
-        if (currentRemaining <= 1 && restaurant?.tempCloseEndTime) {
-          // Firestore'dan temizle
-          updateRestaurant(restaurant.id, {
-            tempCloseEndTime: null,
-            tempCloseOption: null
-          }).catch(console.error);
+          
+          if (remaining > 0) {
+            setRemainingTime(remaining);
+          } else {
+            localStorage.removeItem(`tempClose_${restaurant.id}`);
+            setRemainingTime(0);
+          }
+        } else {
+          setRemainingTime(0);
         }
       }, 1000);
 
       return () => clearInterval(interval);
     }
-  }, [remainingTime, restaurant?.id, restaurant?.tempCloseEndTime]);
+  }, [remainingTime, restaurant?.id]);
   
   // Restoranın açık olup olmadığını kontrol et
   const checkIfOpen = (): boolean => {
@@ -70,33 +97,49 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
   
   // Süreyi formatla
   const formatTime = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
     const remainingSeconds = seconds % 60;
-    if (minutes > 0) {
-      return `${minutes} dk ${remainingSeconds} sn sonra açılır`;
+    
+    if (hours > 0) {
+      return `${hours}s ${minutes}dk ${remainingSeconds}sn`;
+    } else if (minutes > 0) {
+      return `${minutes}dk ${remainingSeconds}sn`;
     } else {
-      return `${remainingSeconds} sn sonra açılır`;
+      return `${remainingSeconds}sn`;
     }
   };
 
   // Bir sonraki açılış zamanını hesapla
   const getNextOpeningInfo = (): string | null => {
-    // Geçici kapanma varsa seçilen seçeneği göster
+    // ÖNCE: Geçici kapanma durumunu kontrol et
     if (remainingTime > 0) {
-      if (restaurant.tempCloseOption && restaurant.tempCloseOption.startsWith('temp-')) {
-        const minutes = parseInt(restaurant.tempCloseOption.split('-')[1]);
-        return `${minutes} dakika sonra açılır`;
-      }
-      return formatTime(remainingTime);
+      return `${formatTime(remainingTime)} sonra açılır`;
     }
     
-    if (!restaurant.openingHours || isOpen) return null;
+    // Açıksa bilgi gösterme
+    if (isOpen) return null;
+    
+    // Kapalıysa ve çalışma saatleri yoksa
+    if (!restaurant.openingHours) return null;
     
     const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
     const todayHours = restaurant.openingHours[today as keyof typeof restaurant.openingHours];
     
+    // Manuel kapalı mı kontrol et
     if (todayHours?.isClosed) {
-      // Bugün manuel kapalı - yarın kontrol et
+      // Tüm günler kapalı mı (dönemsel) kontrol et
+      const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+      const allDaysClosed = daysOfWeek.every(day => {
+        const dayHours = restaurant.openingHours![day as keyof typeof restaurant.openingHours];
+        return dayHours?.isClosed || false;
+      });
+      
+      if (allDaysClosed) {
+        return 'Dönemsel kapalı';
+      }
+      
+      // Sadece bugün kapalı - yarını kontrol et
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowDay = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(tomorrow).toLowerCase();
@@ -105,15 +148,15 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
       if (tomorrowHours && !tomorrowHours.isClosed) {
         return `Yarın ${tomorrowHours.open}'de açılır`;
       }
-      return 'Kapalı';
+      return 'Manuel kapalı';
     }
     
-    // Bugün çalışma saatleri dışında
+    // Çalışma saatleri dışında
     if (todayHours) {
       return `Bugün ${todayHours.open}'de açılır`;
     }
     
-    return 'Kapalı';
+    return null;
   };
   
   const renderWorkingHours = (openingHours?: typeof restaurant.openingHours) => {
@@ -127,30 +170,10 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
 
   const nextOpeningInfo = getNextOpeningInfo();
 
-  // Kapalı badge metnini belirle
-  const getClosedBadgeText = (): string => {
-    if (remainingTime > 0) return 'GEÇİCİ KAPALI';
-    if (!restaurant.openingHours) return 'KAPALI';
-    
-    const today = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(new Date()).toLowerCase();
-    const todayHours = restaurant.openingHours[today as keyof typeof restaurant.openingHours];
-    
-    if (todayHours?.isClosed) {
-      // Tüm günler kapalı mı kontrol et (dönemsel kapalı)
-      const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-      const allDaysClosed = daysOfWeek.every(day => {
-        const dayHours = restaurant.openingHours![day as keyof typeof restaurant.openingHours];
-        return dayHours?.isClosed || false;
-      });
-      
-      if (allDaysClosed) {
-        return 'DÖNEMSEL KAPALI';
-      }
-      return 'KAPALI';
-    }
-    
-    return 'KAPALI';
-  };
+  // SSR için render etme
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <Link href={`/shops/${restaurant.id}`} className={`block h-full ${!isOpen ? 'pointer-events-none' : ''}`}>
@@ -160,12 +183,12 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
           {!isOpen && (
             <div className="absolute top-3 left-3 z-30">
               <div className="bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg">
-                {getClosedBadgeText()}
-                {/*  {nextOpeningInfo && (
+                KAPALI
+                {nextOpeningInfo && (
                   <div className="text-xs opacity-90 mt-1">
                     {nextOpeningInfo}
                   </div>
-                )} */}
+                )}
               </div>
             </div>
           )}
@@ -295,4 +318,4 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
   );
 };
 
-export default RestaurantCard;
+export default RestaurantCardClient;

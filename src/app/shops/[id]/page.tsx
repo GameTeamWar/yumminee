@@ -83,7 +83,7 @@ export default function RestaurantDetailPage() {
             normalizedHours[day] = {
               open: src.open ?? src.opening ?? '00:00',
               close: src.close ?? src.closing ?? '00:00',
-              isClosed: !!src.isClosed ?? !!src.closed ?? false
+              isClosed: src.isClosed ?? src.closed ?? false
             };
           } else {
             normalizedHours[day] = { open: '00:00', close: '00:00', isClosed: true };
@@ -103,6 +103,7 @@ export default function RestaurantDetailPage() {
           collection(db, 'products'),
           where('restaurantId', '==', restaurantId),
           where('isActive', '==', true),
+          where('isAvailable', '==', true),
           orderBy('name', 'asc')
         );
 
@@ -370,7 +371,7 @@ export default function RestaurantDetailPage() {
   const { isOpen, statusText } = getRestaurantStatus(restaurant);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-100">
       {/* Ana Header */}
       <Suspense fallback={<div>Yükleniyor...</div>}>
         <Header />
@@ -389,7 +390,7 @@ export default function RestaurantDetailPage() {
       )}
 
       {/* Hero Header - Restoran Bilgileri */}
-      <div className="relative">
+      <div className="relative bg-gray-50">
         {/* Büyük Cover Image */}
         {(restaurant.coverImage || restaurant.banner) && (
           <div className="w-full h-64 md:h-80 lg:h-96 relative overflow-hidden">
@@ -404,63 +405,64 @@ export default function RestaurantDetailPage() {
         )}
 
         {/* Restoran Bilgileri Overlay */}
-        <div className="relative container mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
-            {/* Restoran Görseli - Daha Büyük */}
-            <div className="flex-shrink-0">
-              <div className="w-[20rem] h-[20rem] md:w-[16rem] md:h-[16rem] rounded-2xl overflow-hidden bg-white shadow-xl relative z-10">
-                {restaurant.image ? (
-                  <img
-                    src={restaurant.image}
-                    alt={restaurant.name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      // Görsel yüklenemezse varsayılan görsele geç
-                      (e.target as HTMLImageElement).src = '/images/restaurants/default.jpg';
-                    }}
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center">
-                    <span className="text-orange-600 font-bold text-5xl md:text-6xl">
-                      {restaurant.name[0]}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+       <div className="relative container mx-auto px-4 py-8">
+  <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
+    {/* Restoran Görseli - Daha Büyük */}
+    <div className="flex-shrink-0">
+      <div className="w-[20rem] h-[20rem] md:w-[16rem] md:h-[16rem] rounded-2xl overflow-hidden bg-white shadow-xl relative z-10">
+        {restaurant.image ? (
+          <img
+            src={restaurant.image}
+            alt={restaurant.name}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              // Görsel yüklenemezse varsayılan görsele geç
+              (e.target as HTMLImageElement).src = '/images/restaurants/default.jpg';
+            }}
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center">
+            <span className="text-orange-600 font-bold text-5xl md:text-6xl">
+              {restaurant.name[0]}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
 
-            {/* Restoran Bilgileri - Daha Detaylı */}
-            <div className="flex-1 text-center md:text-left">
-              {/* Başlık ve Aksiyon Butonları */}
-              <div className="flex flex-wrap items-center justify-between mb-3">
-                <h1 className="text-3xl md:text-4xl font-bold text-white md:text-gray-900">
-                  {restaurant.name}
-                </h1>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="px-3 py-2 h-auto border-white text-white hover:bg-white hover:text-gray-900 md:border-gray-300 md:text-gray-700 md:hover:bg-gray-50"
-                    title="Bildir"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24">
-                      <path fill="currentColor" d="M23.646 18.046 14.851 2.63c-.868-1.54-2.93-2.091-4.45-1.21-.543.33-.977.77-1.194 1.21L.413 18.046c-.868 1.54-.325 3.633 1.195 4.514a3.03 3.03 0 0 0 1.628.44h17.477c1.846 0 3.257-1.541 3.257-3.303.109-.66-.108-1.211-.326-1.651m-11.616.55c-.651 0-1.086-.44-1.086-1.101 0-.66.435-1.101 1.086-1.101s1.086.44 1.086 1.101c0 .66-.435 1.101-1.086 1.101m1.086-5.505c0 .66-.435 1.101-1.086 1.101s-1.086-.44-1.086-1.101V8.687c0-.66.435-1.101 1.086-1.101s1.086.44 1.086 1.101z"/>
-                    </svg>
-                    <span className="ml-1 hidden md:inline">Bildir</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="px-3 py-2 h-auto border-white text-white hover:bg-white hover:text-gray-900 md:border-gray-300 md:text-gray-700 md:hover:bg-gray-50"
-                    title="Hakkında"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24">
-                      <path fill="currentColor" fillRule="evenodd" d="M12 0c6.627 0 12 5.373 12 12s-5.373 12-12 12S0 18.627 0 12 5.373 0 12 0m-.003 6a1 1 0 1 1 .005 2 1 1 0 0 1-.005-2M13 10a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0z" clipRule="evenodd"/>
-                    </svg>
-                    <span className="ml-1 hidden md:inline">Hakkında</span>
-                  </Button>
-                </div>
-              </div>
+    {/* Restoran Bilgileri - Daha Detaylı */}
+    <div className="flex-1 text-center md:text-left">
+      {/* Başlık ve Aksiyon Butonları */}
+      <div className="flex flex-wrap items-center justify-between mb-3">
+        <h1 className="text-2xl md:text-3xl font-normal text-white md:text-gray-900 mt-8">
+          {restaurant.name}
+        </h1>
+  <div className="flex items-center gap-2">
+    <Button
+      variant="outline"
+      size="sm"
+      className="px-3 py-2 h-auto border-none text-white hover:bg-white hover:text-gray-900 md:text-gray-700 md:hover:bg-gray-50"
+      title="Bildir"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M23.646 18.046L14.851 2.63c-.868-1.54-2.93-2.091-4.45-1.21-.543.33-.977.77-1.194 1.21L.413 18.046c-.868 1.54-.325 3.633 1.195 4.514a3.03 3.03 0 0 0 1.628.44h17.477c1.846 0 3.257-1.541 3.257-3.303.109-.66-.108-1.211-.326-1.651m-11.616.55c-.651 0-1.086-.44-1.086-1.101 0-.66.435-1.101 1.086-1.101s1.086.44 1.086 1.101c0 .66-.435 1.101-1.086 1.101m1.086-5.505c0 .66-.435 1.101-1.086 1.101s-1.086-.44-1.086-1.101V8.687c0-.66.435-1.101 1.086-1.101s1.086.44 1.086 1.101z"/>
+      </svg>
+      <span className="ml-1 hidden md:inline">Bildir</span>
+    </Button>
+    <Button
+      variant="outline"
+      size="sm"
+      className="px-3 py-2 h-auto border-none text-white hover:bg-white hover:text-gray-900 md:text-gray-700 md:hover:bg-gray-50"
+      title="Hakkında"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24">
+        <path fill="currentColor" fillRule="evenodd" d="M12 0c6.627 0 12 5.373 12 12s-5.373 12-12 12S0 18.627 0 12 5.373 0 12 0m-.003 6a1 1 0 1 1 .005 2 1 1 0 0 1-.005-2M13 10a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0z" clipRule="evenodd"/>
+      </svg>
+      <span className="ml-1 hidden md:inline">Hakkında</span>
+    </Button>
+  </div>
+</div>
+
 
               {/* Mesafe ve Restoran Türü Bilgileri */}
               <div className="flex flex-wrap items-center gap-4 mb-4 text-white md:text-gray-600">
@@ -488,7 +490,7 @@ export default function RestaurantDetailPage() {
 
                 <Button
                   variant="outline"
-                  className="px-4 py-2 h-auto border-white text-white hover:bg-white hover:text-gray-900 md:border-orange-500 md:text-orange-600 md:hover:bg-orange-50"
+                  className="px-4 py-2 h-auto border-white text-white hover:bg-white hover:text-gray-900 md:border-orange-500 md:text-orange-600 md:hover:bg-orange-50 rounded-full"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 16 16">
                     <path fill="#F27A1A" d="M14.4 3.352c.933.34 1.6 1.217 1.6 2.248v5.6c0 1.326-1.1 2.4-2.456 2.4v1.6a.8.8 0 0 1-.45.712.833.833 0 0 1-.86-.072L9.181 13.6H5.458L7.6 12h4c1.49 0 2.8-1.509 2.8-3zM10.4 0a2.4 2.4 0 0 1 2.4 2.4V8a2.4 2.4 0 0 1-2.4 2.4H6.664L4.96 11.68l-1.28.96A.8.8 0 0 1 2.4 12v-1.6A2.4 2.4 0 0 1 0 8V2.4A2.4 2.4 0 0 1 2.4 0z"/>
@@ -498,59 +500,76 @@ export default function RestaurantDetailPage() {
               </div>
 
               {/* Detaylı Bilgiler */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Çalışma Saatleri */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm text-white md:text-gray-600">Çalışma Saatleri</span>
-                  <button 
-                    onClick={() => setShowHoursModal(true)}
-                    className="flex items-center gap-2 hover:opacity-80 transition-opacity text-left"
-                  >
-                    <Clock className="h-4 w-4 text-white md:text-gray-500" />
-                    <div className="flex flex-col">
-                      <span className="font-medium text-white md:text-gray-900">
-                        {restaurant.openingHours ? formatWorkingHours(restaurant.openingHours) : '08:00-22:00'}
-                      </span>
-                      {/* Açık/Kapalı Durumu */}
-                      <div className="flex items-center gap-1 mt-1">
-                        <div className={`w-2 h-2 rounded-full ${isOpen ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                        <span className={`text-xs font-medium ${isOpen ? 'text-green-400 md:text-green-600' : 'text-red-400 md:text-red-600'}`}>
-                          {statusText}
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                </div>
+<div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+  {/* Çalışma Saatleri */}
+  <div className="flex flex-col gap-1 md:border-r md:border-gray-200 md:pr-4">
+    <span className="text-sm text-white md:text-gray-600">Çalışma Saatleri</span>
+    <button
+      onClick={() => setShowHoursModal(true)}
+      className="flex items-center gap-2 hover:opacity-80 transition-opacity text-left cursor-pointer"
+    >
+      <Clock className="h-4 w-4 text-white md:text-gray-500" />
+      <div className="flex flex-col">
+        <span className="font-medium text-white md:text-gray-900">
+          {restaurant.openingHours
+            ? formatWorkingHours(restaurant.openingHours)
+            : 'Çalışma Saat Bilgisi Yok'}
+        </span>
+        {/* Açık/Kapalı Durumu */}
+        <div className="flex items-center gap-1 mt-1">
+          <div
+            className={`w-2 h-2 rounded-full ${
+              isOpen ? 'bg-green-500' : 'bg-red-500'
+            }`}
+          ></div>
+          <span
+            className={`text-xs font-medium ${
+              isOpen
+                ? 'text-green-400 md:text-green-600'
+                : 'text-red-400 md:text-red-600'
+            }`}
+          >
+            {statusText}
+          </span>
+        </div>
+      </div>
+    </button>
+  </div>
 
-                {/* Minimum Tutar */}
-                {restaurant.minimumOrderAmount > 0 && (
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm text-white md:text-gray-600">Min. Tutar</span>
-                    <span className="font-medium text-white md:text-gray-900">₺{restaurant.minimumOrderAmount}</span>
-                  </div>
-                )}
+  {/* Minimum Tutar */}
+  {restaurant.minimumOrderAmount > 0 && (
+    <div className="flex flex-col gap-1 md:border-r md:border-gray-200 md:pr-4">
+      <span className="text-sm text-white md:text-gray-600">Min. Tutar</span>
+      <span className="font-medium text-white md:text-gray-900">
+        ₺{restaurant.minimumOrderAmount}
+      </span>
+    </div>
+  )}
 
-                {/* Teslimat Süresi */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm text-white md:text-gray-600">Teslimat</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-white md:text-gray-900">{restaurant.deliveryTime} dk</span>
-                  </div>
-                </div>
+  {/* Teslimat Süresi */}
+  <div className="flex flex-col gap-1">
+    <span className="text-sm text-white md:text-gray-600">Teslimat</span>
+    <div className="flex items-center gap-2">
+      <span className="font-medium text-white md:text-gray-900">
+        {restaurant.deliveryTime} dk
+      </span>
+    </div>
+  </div>
 
-                {/* Ödeme Yöntemleri */}
-                {restaurant.paymentMethods && restaurant.paymentMethods.length > 0 && (
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm text-white md:text-gray-600">Ödeme</span>
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-white md:text-gray-500" />
-                      <span className="font-medium text-white md:text-gray-900">
-                        {restaurant.paymentMethods.join(', ')}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
+  {/* Ödeme Yöntemleri (Her zaman aşağıda) */}
+  {restaurant.paymentMethods && restaurant.paymentMethods.length > 0 && (
+    <div className="flex flex-col gap-1 md:col-span-3 mt-2 border-t border-gray-100 pt-2">
+      <span className="text-sm text-white md:text-gray-600">Ödeme</span>
+      <div className="flex items-center gap-2">
+        <CreditCard className="h-4 w-4 text-white md:text-gray-500" />
+        <span className="font-medium text-white md:text-gray-900">
+          {restaurant.paymentMethods.join(', ')}
+        </span>
+      </div>
+    </div>
+  )}
+</div>
+
             </div>
           </div>
         </div>
@@ -559,34 +578,41 @@ export default function RestaurantDetailPage() {
       {/* Ana İçerik */}
       <div className="container mx-auto px-4 py-8">
         <div className="flex gap-8">
-          {/* Sol Sidebar - Kategoriler */}
-          <div className="w-72 flex-shrink-0">
-            <Card className="sticky top-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl font-semibold text-gray-900">Kategoriler</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="max-h-96 overflow-y-auto">
-                  <div className="space-y-2 p-6">
-                    {categoriesWithProducts.map((category: SimpleCategory) => (
-                      <Button
-                        key={category.id}
-                        variant={selectedCategory === category.id ? 'default' : 'ghost'}
-                        className="w-full justify-start h-12 text-left font-medium"
-                        onClick={() => {
-                          setSelectedCategory(category.id);
-                          scrollToCategory(category.id);
-                        }}
-                      >
-                        <span className="mr-2">📋</span>
-                        <span className="capitalize">{category.name}</span>
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+         {/* Sol Sidebar - Kategoriler */}
+<div className="w-72 flex-shrink-0">
+  {/* Başlık kartın dışında */}
+  <h2 className="text-xl font-semibold text-gray-900 mb-3">Kategoriler</h2>
+
+  {/* Kategori kartı */}
+  <Card className="bg-white rounded-2xl shadow-sm border border-gray-100">
+    <CardContent className="p-0">
+      <div className="flex flex-col">
+        {categoriesWithProducts.map((category: SimpleCategory, index: number) => {
+          const isActive = selectedCategory === category.id;
+          return (
+            <button
+              key={category.id}
+              onClick={() => {
+                setSelectedCategory(category.id);
+                scrollToCategory(category.id);
+              }}
+              className={`
+                relative text-left px-5 py-3 text-[15px] font-medium capitalize transition-colors cursor-pointer
+                ${isActive ? 'text-orange-500' : 'text-black hover:text-orange-500'}
+              `}
+            >
+              {/* Sol turuncu çizgi sadece seçilende */}
+              {isActive && (
+                <span className="absolute left-0 top-2 bottom-2 w-[2px] bg-orange-500 rounded-r-full"></span>
+              )}
+              {category.name}
+            </button>
+          );
+        })}
+      </div>
+    </CardContent>
+  </Card>
+</div>
 
           {/* Sağ İçerik - Menü */}
           <div className="flex-1">
@@ -601,14 +627,14 @@ export default function RestaurantDetailPage() {
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-0 max-md:divide-y divide-neutral-lighter md:gap-4">
                       {products.map((product) => (
-                        <div key={product.id} role="button" tabIndex={0} className="hover:cursor-pointer hover:shadow-sticky flex gap-2 p-3 bg-white md:rounded-12 min-h-[108px] items-stretch" onClick={() => handleProductClick(product)}>
+                        <div key={product.id} role="button" tabIndex={0} className="hover:cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex gap-2 p-3 bg-white rounded-2xl min-h-[108px] items-stretch border border-gray-100 hover:border-orange-200 hover:bg-orange-50" onClick={() => handleProductClick(product)}>
                           <img
                             alt="menu"
                             loading="lazy"
                             width="110"
                             height="110"
                             decoding="async"
-                            className="rounded-8 object-cover h-[110px]"
+                            className="rounded-2xl object-cover h-[110px]"
                             src={product.imageUrl || '/images/products/default.jpg'}
                             onError={(e) => {
                               // Görsel yüklenemezse varsayılan ürürn görseline geç
@@ -622,10 +648,10 @@ export default function RestaurantDetailPage() {
                               <p className="body-3-regular text-neutral-dark break-words line-clamp-2">{product.description || ''}</p>
                               {/* Rating display - placeholder for now */}
                               <div className="flex items-center gap-1 mt-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 16 16" className="text-16 text-success">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 16 16" className="text-16 text-green-600">
                                   <path fill="currentColor" d="M1.334 6h2v8h-2a.667.667 0 0 1-.667-.667V6.667c0-.369.298-.667.667-.667m3.528-.862L9.13.871a.33.33 0 0 1 .436-.03l.568.425a1 1 0 0 1 .37 1.047l-.77 3.02H14c.737 0 1.334.597 1.334 1.334V8.07c0 .174-.034.346-.1.507l-2.064 5.01a.67.67 0 0 1-.616.413h-7.22a.667.667 0 0 1-.667-.667V5.61c0-.176.07-.346.195-.471"></path>
                                 </svg>
-                                <span className="body-3-medium text-success">%76 Beğenildi</span>
+                                <span className="body-3-medium text-green-600">%76 Beğenildi</span>
                                 <span className="body-3-medium text-neutral-dark">(25 Değerlendirme)</span>
                               </div>
                             </div>
@@ -636,7 +662,7 @@ export default function RestaurantDetailPage() {
                                     <span className="title-3-semibold text-primary">{product.price} TL</span>
                                   </div>
                                 </div>
-                                <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill border disabled:cursor-not-allowed disabled:!text-neutral-light disabled:bg-neutral-lightest disabled:border-neutral-lightest hover:text-white text-primary border-primary bg-transparent hover:bg-primary-highlight hover:border-primary-highlight px-2 h-6 min-w-6 title-4-bold outline-none no-underline">
+                                <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border disabled:cursor-not-allowed disabled:!text-neutral-light disabled:bg-neutral-lightest disabled:border-neutral-lightest hover:text-white text-orange-600 border-orange-600 bg-transparent hover:bg-orange-600 hover:border-orange-600 px-2 h-6 min-w-6 title-4-bold outline-none no-underline">
                                   Sepete Ekle
                                 </button>
                               </div>
@@ -666,14 +692,14 @@ export default function RestaurantDetailPage() {
                 {/* Menü Öğeleri - Yeni Tasarım */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-0 max-md:divide-y divide-neutral-lighter md:gap-4">
                   {filteredMenu.map((product) => (
-                    <div key={product.id} role="button" tabIndex={0} className="hover:cursor-pointer hover:shadow-sticky flex gap-2 p-3 bg-white md:rounded-12 min-h-[108px] items-stretch" onClick={() => handleProductClick(product)}>
+                    <div key={product.id} role="button" tabIndex={0} className="hover:cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex gap-2 p-3 bg-white rounded-2xl min-h-[108px] items-stretch border border-gray-100 hover:border-orange-200 hover:bg-orange-50" onClick={() => handleProductClick(product)}>
                       <img
                         alt="menu"
                         loading="lazy"
                         width="110"
                         height="110"
                         decoding="async"
-                        className="rounded-8 object-cover h-[110px]"
+                        className="rounded-2xl object-cover h-[110px]"
                         src={product.imageUrl || '/placeholder-food.jpg'}
                         style={{color: 'transparent'}}
                       />
@@ -683,10 +709,10 @@ export default function RestaurantDetailPage() {
                           <p className="body-3-regular text-neutral-dark break-words line-clamp-2">{product.description || ''}</p>
                           {/* Rating display - placeholder for now */}
                           <div className="flex items-center gap-1 mt-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 16 16" className="text-16 text-success">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 16 16" className="text-16 text-green-600">
                               <path fill="currentColor" d="M1.334 6h2v8h-2a.667.667 0 0 1-.667-.667V6.667c0-.369.298-.667.667-.667m3.528-.862L9.13.871a.33.33 0 0 1 .436-.03l.568.425a1 1 0 0 1 .37 1.047l-.77 3.02H14c.737 0 1.334.597 1.334 1.334V8.07c0 .174-.034.346-.1.507l-2.064 5.01a.67.67 0 0 1-.616.413h-7.22a.667.667 0 0 1-.667-.667V5.61c0-.176.07-.346.195-.471"></path>
                             </svg>
-                            <span className="body-3-medium text-success">%76 Beğenildi</span>
+                            <span className="body-3-medium text-green-600">%76 Beğenildi</span>
                             <span className="body-3-medium text-neutral-dark">(25 Değerlendirme)</span>
                           </div>
                         </div>
@@ -697,7 +723,7 @@ export default function RestaurantDetailPage() {
                                 <span className="title-3-semibold text-primary">{product.price} TL</span>
                               </div>
                             </div>
-                            <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill border disabled:cursor-not-allowed disabled:!text-neutral-light disabled:bg-neutral-lightest disabled:border-neutral-lightest hover:text-white text-primary border-primary bg-transparent hover:bg-primary-highlight hover:border-primary-highlight px-2 h-6 min-w-6 title-4-bold outline-none no-underline">
+                            <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border disabled:cursor-not-allowed disabled:!text-neutral-light disabled:bg-neutral-lightest disabled:border-neutral-lightest hover:text-white text-orange-600 border-orange-600 bg-transparent hover:bg-orange-600 hover:border-orange-600 px-2 h-6 min-w-6 title-4-bold outline-none no-underline">
                               Sepete Ekle
                             </button>
                           </div>

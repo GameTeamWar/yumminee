@@ -31,7 +31,26 @@ export default function RestaurantsContent() {
 
   useEffect(() => {
     const unsubscribe = subscribeToAllRestaurants((fetchedRestaurants) => {
-      setRestaurants(fetchedRestaurants);
+      // Normalize openingHours to match the Restaurant type (monday..sunday)
+      const normalized = fetchedRestaurants.map((shop) => {
+        const oh = (shop as any).openingHours || {};
+        const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        const normalizedOH = days.reduce((acc: any, day) => {
+          // try several common key variants, fallback to closed placeholder
+          acc[day] =
+            oh[day] ??
+            oh[day.charAt(0).toUpperCase() + day.slice(1)] ??
+            oh[day.slice(0, 3)] ??
+            { open: '00:00', close: '00:00', isClosed: true };
+          return acc;
+        }, {});
+        return {
+          ...shop,
+          openingHours: normalizedOH,
+        } as unknown as Restaurant;
+      });
+
+      setRestaurants(normalized);
       setLoading(false);
     });
 

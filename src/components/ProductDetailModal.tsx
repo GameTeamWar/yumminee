@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,7 +15,9 @@ import {
   Minus,
   ShoppingCart,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Info,
+  Clock
 } from 'lucide-react';
 import { Product, Restaurant } from '@/types';
 import { CustomerAddress } from '@/lib/firebase/db';
@@ -49,6 +51,7 @@ export default function ProductDetailModal({
   const [showAddressRequired, setShowAddressRequired] = useState(false);
   const [optionGroups, setOptionGroups] = useState<any[]>([]);
   const [showReportDropdown, setShowReportDropdown] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   useEffect(() => {
     if (isOpen && product) {
@@ -137,6 +140,10 @@ export default function ProductDetailModal({
   const handleAddToCart = async () => {
     if (!product || !restaurant) return;
 
+    console.log('Ürün mevcut mu:', product.isAvailable);
+    console.log('Seçilen opsiyonlar:', selectedOptions);
+    console.log('Opsiyon grupları:', optionGroups);
+
     // Restoran durumu kontrolü
     const { isOpen } = getRestaurantStatus(restaurant);
     if (!isOpen) {
@@ -198,6 +205,9 @@ export default function ProductDetailModal({
               <DialogTitle className="text-xl font-semibold text-gray-900">
                 Ürün Detayları
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Ürün seçeneklerini seçin ve sepete ekleyin
+              </DialogDescription>
             </DialogHeader>
 
             {/* Scrollable Content */}
@@ -225,41 +235,52 @@ export default function ProductDetailModal({
                         </span>
                       )}
                     </div>
-                    <DropdownMenu open={showReportDropdown} onOpenChange={setShowReportDropdown}>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
-                          <AlertTriangle className="h-4 w-4 mr-1" />
-                          Bildir
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-80 p-4" align="end">
-                        <div className="caption text-neutral-dark mb-3">Şikayet Nedenini Seçin</div>
-                        <DropdownMenuItem
-                          onClick={() => handleReport('Haksız fiyatlandırma / fiyat hatalı')}
-                          className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
-                        >
-                          Haksız fiyatlandırma / fiyat hatalı
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleReport('Ürün seçenekleri eksik / hatalı')}
-                          className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
-                        >
-                          Ürün seçenekleri eksik / hatalı
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleReport('Ürün ismi veya açıklaması eksik / hatalı')}
-                          className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
-                        >
-                          Ürün ismi veya açıklaması eksik / hatalı
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleReport('Ürün görseli hatalı')}
-                          className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
-                        >
-                          Ürün görseli hatalı
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-gray-400 hover:text-gray-600 p-2"
+                        onClick={() => setShowInfoModal(true)}
+                        title="Ürün bilgileri"
+                      >
+                        <Info className={`h-4 w-4 ${product.allergens && product.allergens.length > 0 ? 'animate-allergen-warning' : ''}`} />
+                      </Button>
+                      <DropdownMenu open={showReportDropdown} onOpenChange={setShowReportDropdown}>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
+                            <AlertTriangle className="h-4 w-4 mr-1" />
+                            Bildir
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-80 p-4" align="end">
+                          <div className="caption text-neutral-dark mb-3">Şikayet Nedenini Seçin</div>
+                          <DropdownMenuItem
+                            onClick={() => handleReport('Haksız fiyatlandırma / fiyat hatalı')}
+                            className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
+                          >
+                            Haksız fiyatlandırma / fiyat hatalı
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleReport('Ürün seçenekleri eksik / hatalı')}
+                            className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
+                          >
+                            Ürün seçenekleri eksik / hatalı
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleReport('Ürün ismi veya açıklaması eksik / hatalı')}
+                            className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
+                          >
+                            Ürün ismi veya açıklaması eksik / hatalı
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleReport('Ürün görseli hatalı')}
+                            className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
+                          >
+                            Ürün görseli hatalı
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -338,7 +359,7 @@ export default function ProductDetailModal({
               {/* Özel Talimatlar */}
               <div className="space-y-3 mb-6">
                 <Label htmlFor="instructions" className="text-sm font-medium">
-                  Özel Talimatlar (İsteğe bağlı)
+                  Ürüne Özel Talimatlar (İsteğe bağlı)
                 </Label>
                 <Textarea
                   id="instructions"
@@ -425,6 +446,9 @@ export default function ProductDetailModal({
               <AlertTriangle className="h-5 w-5 text-red-500" />
               Restoran Şu Anda Hizmet Vermiyor
             </DialogTitle>
+            <DialogDescription>
+              Bu restoran şu anda kapalı olduğu için sipariş veremezsiniz.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-gray-600">
@@ -441,36 +465,93 @@ export default function ProductDetailModal({
         </DialogContent>
       </Dialog>
 
-      {/* Adres Gerekli Modal */}
-      <Dialog open={showAddressRequired} onOpenChange={() => setShowAddressRequired(false)}>
+      {/* Ürün Bilgileri Modal */}
+      <Dialog open={showInfoModal} onOpenChange={setShowInfoModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-orange-500" />
-              Adres Seçimi Gerekli
+              <Info className="h-5 w-5 text-blue-500" />
+              Ürün Bilgileri
             </DialogTitle>
+            <DialogDescription>
+              Ürün hakkında hazırlama süresi ve alerjen bilgileri.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <p className="text-gray-600">
-              Sipariş verebilmek için önce teslimat adresinizi seçmeniz gerekiyor.
-            </p>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => {
-                  setShowAddressRequired(false);
-                  onAddressSelect();
-                }}
-                className="flex-1 bg-orange-500 hover:bg-orange-600"
-              >
-                Adres Seç
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowAddressRequired(false)}
-              >
-                İptal
-              </Button>
-            </div>
+            {/* Hazırlama Süresi */}
+            {product.preparationTime && (
+              <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                <Clock className="h-5 w-5 text-blue-600" />
+                <div>
+                  <div className="font-medium text-gray-900">Hazırlama Süresi</div>
+                  <div className="text-sm text-gray-600">
+                    Yaklaşık {product.preparationTime} dakika
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Alerjen Uyarısı */}
+            {product.allergens && product.allergens.length > 0 && (
+              <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  <div>
+                    <div className="font-medium text-gray-900 mb-1">Alerjen Uyarısı</div>
+                    <div className="text-sm text-gray-700">
+                      Bu ürün aşağıdaki alerjenleri içerebilir:
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {product.allergens.map((allergen, index) => (
+                        <Badge
+                          key={index}
+                          variant="secondary"
+                          className="bg-yellow-100 text-yellow-800 text-xs"
+                        >
+                          {allergen}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Beslenme Bilgileri */}
+            {/* {product.nutritionalInfo && (
+              <div className="p-3 bg-green-50 rounded-lg">
+                <div className="font-medium text-gray-900 mb-2">Beslenme Bilgileri (100g)</div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {product.nutritionalInfo.calories && (
+                    <div>Kalori: {product.nutritionalInfo.calories} kcal</div>
+                  )}
+                  {product.nutritionalInfo.protein && (
+                    <div>Protein: {product.nutritionalInfo.protein}g</div>
+                  )}
+                  {product.nutritionalInfo.carbs && (
+                    <div>Karbonhidrat: {product.nutritionalInfo.carbs}g</div>
+                  )}
+                  {product.nutritionalInfo.fat && (
+                    <div>Yağ: {product.nutritionalInfo.fat}g</div>
+                  )}
+                </div>
+              </div>
+            )} */}
+
+            {/* Bilgi Yoksa */}
+            {!product.preparationTime && (!product.allergens || product.allergens.length === 0) && (
+              <div className="text-center py-8 text-gray-500">
+                <Info className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p>Bu ürün için ek bilgi bulunmuyor.</p>
+              </div>
+            )}
+
+            <Button
+              onClick={() => setShowInfoModal(false)}
+              className="w-full"
+            >
+              Tamam
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
