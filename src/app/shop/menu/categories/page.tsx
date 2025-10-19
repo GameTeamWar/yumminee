@@ -25,7 +25,7 @@ import { db } from '@/lib/firebase/config';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { generateUniqueEntityId } from '@/lib/utils/idGenerator';
-import { deleteCategoryAndUpdateProducts } from '@/lib/firebase/db';
+import { getRestaurantByOwnerId, deleteCategoryAndUpdateProducts } from '@/lib/firebase/db';
 
 interface Category {
   id: string;
@@ -46,6 +46,7 @@ export default function CategoriesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [restaurant, setRestaurant] = useState<any>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   const [formData, setFormData] = useState({
@@ -58,28 +59,48 @@ export default function CategoriesPage() {
   useEffect(() => {
     if (!user?.uid) return;
 
-    const categoriesRef = collection(db, 'categories');
-    const q = query(
-      categoriesRef,
-      where('restaurantId', '==', user.uid),
-      orderBy('sortOrder', 'asc')
-    );
+    const loadRestaurantAndCategories = async () => {
+      try {
+        // Önce restoranı bul
+        const restaurantData = await getRestaurantByOwnerId(user.uid);
+        if (!restaurantData) {
+          console.error('Restoran bulunamadı');
+          return;
+        }
+        setRestaurant(restaurantData);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const categoriesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Category[];
+        const restaurantId = restaurantData.id;
 
-      setCategories(categoriesData);
-      setLoading(false);
-    }, (error) => {
-      console.error('Kategoriler yüklenirken hata:', error);
-      toast.error('Kategoriler yüklenirken hata oluştu');
-      setLoading(false);
-    });
+        // Kategorileri yükle
+        const categoriesRef = collection(db, 'categories');
+        const q = query(
+          categoriesRef,
+          where('shopId', '==', restaurantId),
+          orderBy('sortOrder', 'asc')
+        );
 
-    return () => unsubscribe();
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          const categoriesData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as Category[];
+
+          setCategories(categoriesData);
+          setLoading(false);
+        }, (error) => {
+          console.error('Kategoriler yüklenirken hata:', error);
+          toast.error('Kategoriler yüklenirken hata oluştu');
+          setLoading(false);
+        });
+
+        return () => unsubscribe();
+      } catch (error) {
+        console.error('Restoran verileri yüklenirken hata:', error);
+        setLoading(false);
+      }
+    };
+
+    loadRestaurantAndCategories();
   }, [user?.uid]);
 
   // Filtrelenmiş kategoriler
@@ -95,15 +116,15 @@ export default function CategoriesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!user?.uid) {
-      toast.error('Kullanıcı bulunamadı');
+    if (!user?.uid || !restaurant) {
+      toast.error('Kullanıcı veya restoran bilgisi bulunamadı');
       return;
     }
 
     try {
       let categoryData: any = {
         ...formData,
-        restaurantId: user.uid
+        shopId: restaurant.id
       };
 
       if (editingCategory) {
@@ -113,7 +134,7 @@ export default function CategoriesPage() {
         toast.success('Kategori güncellendi');
       } else {
         // Yeni kategori - custom ID oluştur
-        const customId = await generateUniqueEntityId('categories', user.uid, db);
+        const customId = await generateUniqueEntityId('categories', restaurant.id, db);
         categoryData.customId = customId;
         await addDoc(collection(db, 'categories'), categoryData);
         toast.success('Kategori eklendi');

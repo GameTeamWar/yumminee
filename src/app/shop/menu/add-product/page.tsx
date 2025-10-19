@@ -80,7 +80,7 @@ export default function AddProductPage() {
         // Kategorileri yükle
         const categoriesQuery = query(
           collection(db, 'categories'),
-          where('restaurantId', '==', restaurantData.ownerId || restaurantData.id),
+          where('shopId', '==', restaurantData.id),
           where('isActive', '==', true)
         );
 
@@ -95,7 +95,7 @@ export default function AddProductPage() {
         // Opsiyonları yükle
         const optionsQuery = query(
           collection(db, 'options'),
-          where('restaurantId', '==', restaurantData.ownerId || restaurantData.id),
+          where('shopId', '==', restaurantData.id),
           where('isActive', '==', true)
         );
 
@@ -184,11 +184,11 @@ export default function AddProductPage() {
 
       // Get selected categories and options
       const selectedCategories = productData.categoryIds.map(id =>
-        categories.find(cat => (cat.customId || cat.id) === id)
+        categories.find(cat => cat.id === id)
       ).filter(Boolean);
 
       const selectedOptions = productData.optionIds.map(id =>
-        options.find(opt => (opt.customId || opt.id) === id)
+        options.find(opt => opt.id === id)
       ).filter(Boolean);
 
       // Prepare product data for Firebase
@@ -410,7 +410,7 @@ export default function AddProductPage() {
                       >
                         {(() => {
                           const validCategoryIds = productData.categoryIds.filter(id =>
-                            categories.some(cat => (cat.customId || cat.id) === id)
+                            categories.some(cat => cat.id === id)
                           );
                           return validCategoryIds.length > 0
                             ? `${validCategoryIds.length} kategori seçildi`
@@ -428,8 +428,8 @@ export default function AddProductPage() {
                             <div key={category.id} className="flex items-center space-x-2">
                               <Checkbox
                                 id={`category-${category.id}`}
-                                checked={productData.categoryIds.includes(category.customId || category.id)}
-                                onCheckedChange={() => handleCategoryToggle(category.customId || category.id)}
+                                checked={productData.categoryIds.includes(category.id)}
+                                onCheckedChange={() => handleCategoryToggle(category.id)}
                               />
                               <Label
                                 htmlFor={`category-${category.id}`}
@@ -470,7 +470,7 @@ export default function AddProductPage() {
                       >
                         {(() => {
                           const validOptionIds = productData.optionIds.filter(id =>
-                            options.some(opt => (opt.customId || opt.id) === id)
+                            options.some(opt => opt.id === id)
                           );
                           return validOptionIds.length > 0
                             ? `${validOptionIds.length} opsiyon seçildi`
@@ -488,8 +488,8 @@ export default function AddProductPage() {
                             <div key={option.id} className="flex items-center space-x-2">
                               <Checkbox
                                 id={`option-${option.id}`}
-                                checked={productData.optionIds.includes(option.customId || option.id)}
-                                onCheckedChange={() => handleOptionToggle(option.customId || option.id)}
+                                checked={productData.optionIds.includes(option.id)}
+                                onCheckedChange={() => handleOptionToggle(option.id)}
                               />
                               <Label
                                 htmlFor={`option-${option.id}`}

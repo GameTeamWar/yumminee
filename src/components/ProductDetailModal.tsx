@@ -5,18 +5,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import {
   Plus,
   Minus,
   ShoppingCart,
-  Clock,
-  Star,
-  AlertTriangle,
-  MapPin
+  X,
+  AlertTriangle
 } from 'lucide-react';
 import { Product, Restaurant } from '@/types';
 import { CustomerAddress } from '@/lib/firebase/db';
@@ -58,9 +56,11 @@ export default function ProductDetailModal({
       setShowRestaurantClosed(false);
       setShowAddressRequired(false);
 
-      // Opsiyon gruplarını product.optionIds ile eşleştir
-      if (product.optionIds && product.optionIds.length > 0 && options.length > 0) {
-        const productOptions = options.filter(option => product.optionIds!.includes(option.id));
+      // Opsiyonları kontrol et - önce ürünün kendisindeki options'ı dene, yoksa prop'tan geleni kullan
+      if (product.options && product.options.length > 0) {
+        setOptionGroups(product.options);
+      } else if (product.optionIds && product.optionIds.length > 0 && options.length > 0) {
+        const productOptions = options.filter(option => product.optionIds!.includes(option.customId));
         setOptionGroups(productOptions);
       } else {
         setOptionGroups([]);
@@ -73,7 +73,7 @@ export default function ProductDetailModal({
       const currentSelections = prev[optionId] || [];
 
       if (isMultiple) {
-        // Çoklu seçim için - aynı item zaten varsa kaldır, yoksa ekle
+        // Çoklu seçim için
         const isAlreadySelected = currentSelections.includes(itemId);
         if (isAlreadySelected) {
           return {
@@ -87,7 +87,7 @@ export default function ProductDetailModal({
           };
         }
       } else {
-        // Tek seçim için - sadece bu item'i seç
+        // Tek seçim için
         return {
           ...prev,
           [optionId]: [itemId]
@@ -105,7 +105,7 @@ export default function ProductDetailModal({
     optionGroups.forEach((optionGroup: any) => {
       const selectedItems = selectedOptions[optionGroup.id] || [];
       selectedItems.forEach((itemId: string) => {
-        const item = optionGroup.items?.find((i: any) => i.id === itemId);
+        const item = optionGroup.values?.find((i: any) => i.id === itemId);
         if (item && item.price > 0) {
           total += item.price;
         }
@@ -185,218 +185,207 @@ export default function ProductDetailModal({
     <>
       {/* Ana Ürün Modal */}
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">{product.name}</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden p-0">
+          <div className="flex flex-col h-full max-h-[90vh]">
+            {/* Header */}
+            <DialogHeader className="px-6 py-5 border-b border-neutral-lighter">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="text-xl font-semibold text-gray-900">
+                  Ürün Detayları
+                </DialogTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onClose}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </DialogHeader>
 
-          <div className="space-y-6">
-            {/* Ürün Görseli */}
-            <div className="aspect-video bg-gray-100 relative overflow-hidden rounded-lg">
-              {product.imageUrl ? (
-                <img
-                  src={product.imageUrl}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-orange-50 to-orange-200 flex items-center justify-center">
-                  <span className="text-orange-400 text-6xl">🍽️</span>
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {/* Ürün Görseli ve Temel Bilgiler */}
+              <div className="flex gap-4 mb-6">
+                <div className="flex-shrink-0">
+                  <img
+                    src={product.imageUrl || '/images/products/default.jpg'}
+                    alt={product.name}
+                    className="w-32 h-32 object-cover rounded-lg border border-neutral-lighter"
+                  />
                 </div>
-              )}
-            </div>
-
-            {/* Ürün Bilgileri */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
+                <div className="flex-1 space-y-2">
                   <h3 className="text-lg font-semibold text-gray-900">{product.name}</h3>
-                  {product.description && (
-                    <p className="text-gray-600 mt-1">{product.description}</p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <div className="flex items-center gap-2 justify-end">
-                    {product.originalPrice && product.originalPrice > product.price && (
-                      <span className="text-lg text-gray-500 line-through">
-                        ₺{product.originalPrice.toFixed(2)}
+                  <p className="text-sm text-gray-600 break-words">{product.description || ''}</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold text-orange-600">
+                        {product.price.toFixed(2)} TL
                       </span>
-                    )}
-                    <span className="text-2xl font-bold text-orange-600">
-                      ₺{product.price.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Ürün Detayları */}
-              <div className="flex items-center gap-4 text-sm text-gray-500">
-                {product.preparationTime && (
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    <span>{product.preparationTime} dk</span>
-                  </div>
-                )}
-                {!product.isAvailable && (
-                  <Badge variant="destructive">Mevcut Değil</Badge>
-                )}
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Opsiyonlar */}
-            {optionGroups && optionGroups.length > 0 && (
-              <div className="space-y-4">
-                <h4 className="text-lg font-semibold text-gray-900">Opsiyonlar</h4>
-
-                {optionGroups.map((optionGroup: any, index: number) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h5 className="font-medium text-gray-900">{optionGroup.name}</h5>
-                        {optionGroup.isRequired && (
-                          <span className="text-sm text-red-600">* Zorunlu</span>
-                        )}
-                      </div>
-                      {optionGroup.maxSelections > 1 && (
-                        <span className="text-sm text-gray-500">
-                          Max {optionGroup.maxSelections} seçim
+                      {product.originalPrice && product.originalPrice > product.price && (
+                        <span className="text-sm text-gray-500 line-through">
+                          {product.originalPrice.toFixed(2)} TL
                         </span>
                       )}
                     </div>
+                    <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
+                      <AlertTriangle className="h-4 w-4 mr-1" />
+                      Bildir
+                    </Button>
+                  </div>
+                </div>
+              </div>
 
-                    <div className="space-y-2">
-                      {optionGroup.maxSelections === 1 ? (
-                        // Tek seçim (radio)
-                        <RadioGroup
-                          value={selectedOptions[optionGroup.id]?.[0] || ''}
-                          onValueChange={(value) => handleOptionChange(optionGroup.id, value)}
-                        >
-                          {optionGroup.items?.map((item: any) => (
-                            <div key={item.id} className="flex items-center space-x-3">
-                              <RadioGroupItem value={item.id} id={item.id} />
-                              <Label htmlFor={item.id} className="flex-1 cursor-pointer">
-                                <div className="flex justify-between items-center">
-                                  <span>{item.name}</span>
-                                  {item.price > 0 && (
-                                    <span className="text-orange-600 font-medium">
-                                      +₺{item.price.toFixed(2)}
-                                    </span>
-                                  )}
-                                </div>
-                              </Label>
-                            </div>
-                          ))}
-                        </RadioGroup>
-                      ) : (
-                        // Çoklu seçim (checkbox)
-                        optionGroup.items?.map((item: any) => (
-                          <div key={item.id} className="flex items-center space-x-3">
-                            <Checkbox
-                              id={item.id}
-                              checked={selectedOptions[optionGroup.id]?.includes(item.id) || false}
-                              onCheckedChange={() => handleOptionChange(optionGroup.id, item.id, true)}
-                            />
-                            <Label htmlFor={item.id} className="flex-1 cursor-pointer">
-                              <div className="flex justify-between items-center">
-                                <span>{item.name}</span>
-                                {item.price > 0 && (
-                                  <span className="text-orange-600 font-medium">
-                                    +₺{item.price.toFixed(2)}
-                                  </span>
-                                )}
+              {/* Opsiyonlar */}
+              {optionGroups && optionGroups.length > 0 && (
+                <div className="space-y-5 mb-6">
+                  {optionGroups.map((optionGroup: any, index: number) => (
+                    <div key={index} className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-base font-semibold text-gray-900">
+                          {optionGroup.name}
+                        </Label>
+                        {optionGroup.isRequired && (
+                          <Badge variant="secondary" className="bg-orange-100 text-orange-700">
+                            Zorunlu
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        {optionGroup.maxSelections === 1 ? (
+                          // Tek seçim - Select
+                          <Select
+                            value={selectedOptions[optionGroup.id]?.[0] || ''}
+                            onValueChange={(value) => handleOptionChange(optionGroup.id, value)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder={`${optionGroup.name} seçin`} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {optionGroup.values?.map((item: any) => (
+                                <SelectItem key={item.id} value={item.id}>
+                                  <div className="flex justify-between items-center w-full">
+                                    <span>{item.name}</span>
+                                    {item.price > 0 && (
+                                      <span className="text-orange-600 font-medium ml-2">
+                                        +{item.price.toFixed(2)} TL
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          // Çoklu seçim - Checkbox'lar
+                          <div className="space-y-2">
+                            {optionGroup.values?.map((item: any) => (
+                              <div key={item.id} className="flex items-center space-x-3">
+                                <Checkbox
+                                  id={item.id}
+                                  checked={selectedOptions[optionGroup.id]?.includes(item.id) || false}
+                                  onCheckedChange={() => handleOptionChange(optionGroup.id, item.id, true)}
+                                />
+                                <Label htmlFor={item.id} className="flex-1 cursor-pointer">
+                                  <div className="flex justify-between items-center">
+                                    <span>{item.name}</span>
+                                    {item.price > 0 && (
+                                      <span className="text-orange-600 font-medium">
+                                        +{item.price.toFixed(2)} TL
+                                      </span>
+                                    )}
+                                  </div>
+                                </Label>
                               </div>
-                            </Label>
+                            ))}
                           </div>
-                        ))
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
 
-            {/* Özel Talimatlar */}
-            <div className="space-y-2">
-              <Label htmlFor="instructions" className="text-sm font-medium">
-                Özel Talimatlar (İsteğe bağlı)
-              </Label>
-              <textarea
-                id="instructions"
-                value={specialInstructions}
-                onChange={(e) => setSpecialInstructions(e.target.value)}
-                placeholder="Özel isteklerinizi yazın..."
-                className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                rows={3}
-              />
-            </div>
-
-            {/* Miktar ve Toplam */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Label className="text-sm font-medium">Miktar:</Label>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={decreaseQuantity}
-                    disabled={quantity <= 1}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
-                  <span className="font-bold text-lg min-w-[2rem] text-center">{quantity}</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={increaseQuantity}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
+              {/* Özel Talimatlar */}
+              <div className="space-y-3 mb-6">
+                <Label htmlFor="instructions" className="text-sm font-medium">
+                  Özel Talimatlar (İsteğe bağlı)
+                </Label>
+                <Textarea
+                  id="instructions"
+                  value={specialInstructions}
+                  onChange={(e) => setSpecialInstructions(e.target.value.slice(0, 200))} // 200 karakter limiti
+                  placeholder="Özel isteklerinizi yazın..."
+                  className="resize-none"
+                  rows={3}
+                />
+                <div className="text-xs text-gray-500 text-right">
+                  {specialInstructions.length}/200 karakter
                 </div>
               </div>
+            </div>
 
-              <div className="text-right">
-                <div className="text-sm text-gray-600">Toplam:</div>
-                <div className="flex items-center gap-2 justify-end">
-                  {product.originalPrice && product.originalPrice > product.price && (
-                    <span className="text-lg text-gray-500 line-through">
-                      ₺{(product.originalPrice * quantity).toFixed(2)}
+            {/* Alt Kısım - Miktar, Toplam, Butonlar */}
+            <div className="border-t border-neutral-lighter px-6 py-4 bg-white">
+              <div className="flex items-center justify-between">
+                {/* Miktar Seçimi */}
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-medium">Miktar:</Label>
+                  <div className="flex items-center border border-neutral-lighter rounded-lg">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={decreaseQuantity}
+                      disabled={quantity <= 1}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <span className="px-3 py-1 text-sm font-medium min-w-[2rem] text-center">
+                      {quantity}
                     </span>
-                  )}
-                  <span className="text-2xl font-bold text-orange-600">
-                    ₺{calculateTotalPrice().toFixed(2)}
-                  </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={increaseQuantity}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Sepete Ekle Butonu */}
-            <Button
-              onClick={handleAddToCart}
-              className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg"
-              disabled={!product.isAvailable}
-            >
-              <ShoppingCart className="h-5 w-5 mr-2" />
-              {!product.isAvailable ? 'Mevcut Değil' : 'Sepete Ekle'}
-            </Button>
-
-            {/* Alerjen Bilgileri */}
-            {product.allergens && product.allergens.length > 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                  <div>
-                    <h5 className="font-medium text-yellow-800">Alerjen Uyarısı</h5>
-                    <p className="text-sm text-yellow-700 mt-1">
-                      Bu ürün şu alerjenleri içerir: {product.allergens.join(', ')}
-                    </p>
+                {/* Toplam Fiyat */}
+                <div className="text-right">
+                  <div className="text-sm text-gray-600">Toplam</div>
+                  <div className="text-lg font-bold text-orange-600">
+                    {calculateTotalPrice().toFixed(2)} TL
                   </div>
                 </div>
               </div>
-            )}
+
+              {/* Sepet Butonları */}
+              <div className="flex gap-3 mt-4">
+                <Button
+                  variant="outline"
+                  onClick={handleAddToCart}
+                  className="flex-1"
+                  disabled={!product.isAvailable}
+                >
+                  Hızlı Sipariş
+                </Button>
+                <Button
+                  onClick={handleAddToCart}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                  disabled={!product.isAvailable}
+                >
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  Sepete Ekle
+                </Button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -406,7 +395,7 @@ export default function ProductDetailModal({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-red-500" />
+              <AlertTriangle className="h-5 w-5 text-red-500" />
               Restoran Şu Anda Hizmet Vermiyor
             </DialogTitle>
           </DialogHeader>
@@ -430,7 +419,7 @@ export default function ProductDetailModal({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <MapPin className="h-5 w-5 text-orange-500" />
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
               Adres Seçimi Gerekli
             </DialogTitle>
           </DialogHeader>

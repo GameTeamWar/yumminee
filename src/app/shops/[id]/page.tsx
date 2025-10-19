@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { getRestaurant, getRestaurantMenu, subscribeToUserAddresses, getRestaurantCategories } from '@/lib/firebase/db';
 import { Shop, Product, CustomerAddress, UserAddress } from '@/types';
-import { collection, query, where, orderBy, onSnapshot, doc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, Query, DocumentData } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 
 // Basit kategori interface'i
@@ -32,39 +32,7 @@ import { LocationPicker } from '@/components/maps/LocationPicker';
 import { AddressSelectionModal } from '@/components/AddressSelectionModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-// Local fallback for ProductDetailModal to avoid missing module/type errors.
-// Replace this with the real component implementation at '@/components/ProductDetailModal' when available.
-const ProductDetailModal = (props: {
-  isOpen: boolean;
-  onClose: () => void;
-  product?: Product | null;
-  restaurant?: Shop | null;
-  selectedAddress?: CustomerAddress | null;
-  onAddressSelect?: () => void;
-  options?: any[];
-}) => {
-  if (!props.isOpen) return null;
-
-  // Minimal UI so the page can render and the type error is resolved.
-  return (
-    <Dialog open={true} onOpenChange={props.onClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Ürün Detayı
-          </DialogTitle>
-        </DialogHeader>
-        <div className="p-4">
-          <h3 className="text-lg font-semibold">{props.product?.name || 'Ürün'}</h3>
-          {props.product?.description && <p className="text-sm text-gray-600 mt-2">{props.product?.description}</p>}
-          <div className="mt-4 flex justify-end">
-            <Button onClick={props.onClose}>Kapat</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
+import ProductDetailModal from '@/components/ProductDetailModal';
 import { useCart } from '@/contexts/CartContext';
 
 const Header = dynamic(() => import('@/components/Header'), {
@@ -149,7 +117,7 @@ export default function RestaurantDetailPage() {
         // Kategorileri gerçek zamanlı dinle - ANA KATEGORİLER KOLEKSİYONUNDAN
         const categoriesQuery = query(
           collection(db, 'categories'),
-          where('restaurantId', '==', restaurantId),
+          where('shopId', '==', restaurantId),
           where('isActive', '==', true),
           orderBy('name', 'asc')
         );
@@ -162,26 +130,9 @@ export default function RestaurantDetailPage() {
           setCategories(categoriesData);
         });
 
-        // Options'ı gerçek zamanlı dinle
-        const optionsQuery = query(
-          collection(db, 'options'),
-          where('shopId', '==', restaurantId),
-          where('isActive', '==', true),
-          orderBy('sortOrder')
-        );
-
-        const unsubscribeOptions = onSnapshot(optionsQuery, (snapshot) => {
-          const optionsData: any[] = [];
-          snapshot.forEach((doc) => {
-            optionsData.push({ id: doc.id, ...doc.data() });
-          });
-          setOptions(optionsData);
-        });
-
         return () => {
           unsubscribeCategories();
           unsubscribeMenu();
-          unsubscribeOptions();
         };
 
       } catch (error) {
@@ -212,7 +163,30 @@ export default function RestaurantDetailPage() {
     return () => unsubscribeRestaurant();
   }, [restaurantId]);
 
-  // Konum bilgisini yükle ve adresleri dinle
+  // Options'ı restaurant değiştiğinde çek
+  useEffect(() => {
+    if (!restaurant) {
+      setOptions([]);
+      return;
+    }
+
+    const optionsQuery = query(
+      collection(db, 'options'),
+      where('restaurantId', '==', restaurant.ownerId),
+      where('isActive', '==', true),
+      orderBy('sortOrder')
+    );
+
+    const unsubscribeOptions = onSnapshot(optionsQuery, (snapshot) => {
+      const optionsData: any[] = [];
+      snapshot.forEach((doc) => {
+        optionsData.push({ id: doc.id, ...doc.data() });
+      });
+      setOptions(optionsData);
+    });
+
+    return () => unsubscribeOptions();
+  }, [restaurant]);
   useEffect(() => {
     let unsubscribeAddresses: (() => void) | undefined;
 

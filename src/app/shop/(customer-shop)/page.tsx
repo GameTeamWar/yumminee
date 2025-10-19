@@ -41,6 +41,7 @@ interface Product {
   categoryName: string
   isAvailable: boolean
   preparationTime?: number
+  categoryIds?: string[]
 }
 
 interface Category {
@@ -91,7 +92,7 @@ export default function CustomerShopPage() {
   })
 
   // URL'den restaurant ID'yi al
-  const restaurantId = 'demo-restaurant' // Bu gerçek uygulamada URL parametresinden gelecek
+  const restaurantId = '17607296269' // Gerçek restaurant ID'si
 
   useEffect(() => {
     if (!restaurantId) return
@@ -173,7 +174,8 @@ export default function CustomerShopPage() {
   const filteredProducts = products.filter(product => {
     const matchesCategory = selectedCategory === 'all' ||
                            (!product.categoryId && selectedCategory === 'uncategorized') ||
-                           (product.categoryId === selectedCategory)
+                           (product.categoryId === selectedCategory) ||
+                           (product.categoryIds && product.categoryIds.includes(selectedCategory))
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          product.description.toLowerCase().includes(searchTerm.toLowerCase())
     return matchesCategory && matchesSearch
