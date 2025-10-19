@@ -1,6 +1,6 @@
 // src/components/RestaurantCard.tsx
 import Link from 'next/link';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Star, Clock, MapPin, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Restaurant } from '@/types';
@@ -21,6 +21,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
   const [productsWithOptions, setProductsWithOptions] = useState(0);
   const { getRemainingTime, updateRemainingTime } = useRestaurant();
   const remainingTime = getRemainingTime(restaurant.id);
+  const lastTempCloseRef = useRef<number | null>(null);
   
   // Ürün kontrolü yap (Real-time)
   useEffect(() => {
@@ -48,11 +49,14 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
   
   // Geçici kapanma süresini hesapla ve global state'e ata
   useEffect(() => {
-    if (!restaurant?.tempCloseEndTime) {
-      updateRemainingTime(restaurant?.id || '', null);
-      return;
+    if (restaurant?.tempCloseEndTime !== lastTempCloseRef.current) {
+      lastTempCloseRef.current = restaurant?.tempCloseEndTime || null;
+      if (!restaurant?.tempCloseEndTime) {
+        updateRemainingTime(restaurant?.id || '', null);
+        return;
+      }
+      updateRemainingTime(restaurant.id, restaurant.tempCloseEndTime);
     }
-    updateRemainingTime(restaurant.id, restaurant.tempCloseEndTime);
   }, [restaurant?.tempCloseEndTime, restaurant?.id, updateRemainingTime]);  // Süreyi formatla (dakika ve saniye)
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -168,7 +172,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
   return (
     <Link href={`/shops/${restaurant.id}`} className={`block h-full ${!isOpen ? 'pointer-events-none' : ''}`}>
       <Card className={`overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100 rounded-2xl group h-full p-0 ${!isOpen ? 'opacity-70' : ''}`}>
-        <div className="relative h-56 w-full overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 rounded-t-2xl">
+        <div className="relative h-52 w-full overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 rounded-t-2xl">
           {/* Kapalı Badge */}
           {!isOpen && (
             <div className="absolute top-3 left-3 z-30">
@@ -237,9 +241,9 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
         </div>
 
         {/* Card Content */}
-        <div className="p-5 bg-white">
+        <div className="  px-4 bg-white">
           {/* Restoran Adı */}
-          <h3 className="font-bold text-lg truncate mb-2">{restaurant.name}</h3>
+          <h3 className="font-bold text-lg truncate -mt-5">{restaurant.name}</h3>
           
           {/* Kategoriler */}
           <div className="text-sm text-gray-500 mb-4">
@@ -364,7 +368,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
 
           {/* Sistem Kapalı Butonu */}
           {!hasActiveProducts && (
-            <div className="mt-3">
+            <div className="my-3">
               <button 
                 disabled 
                 className="w-full bg-gray-800 text-white px-4 py-2 rounded-lg font-semibold text-sm cursor-not-allowed opacity-60"

@@ -406,6 +406,11 @@ export default function RestaurantDetailPage() {
               src={restaurant.coverImage || restaurant.banner}
               alt={restaurant.name}
               className="w-full h-full object-cover"
+              style={{ 
+                filter: !isOpen 
+                  ? 'grayscale(100%) brightness(0.8)' 
+                  : 'none' 
+              }}
             />
             {/* Overlay gradient */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
@@ -423,6 +428,11 @@ export default function RestaurantDetailPage() {
             src={restaurant.image}
             alt={restaurant.name}
             className="w-full h-full object-cover"
+            style={{ 
+              filter: !isOpen 
+                ? 'grayscale(100%) brightness(0.8)' 
+                : 'none' 
+            }}
             onError={(e) => {
               // Görsel yüklenemezse varsayılan görsele geç
               (e.target as HTMLImageElement).src = '/images/restaurants/default.jpg';
@@ -635,7 +645,17 @@ export default function RestaurantDetailPage() {
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-0 max-md:divide-y divide-neutral-lighter md:gap-4">
                       {products.map((product) => (
-                        <div key={product.id} role="button" tabIndex={0} className="hover:cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex gap-2 p-3 bg-white rounded-2xl min-h-[108px] items-stretch border border-gray-100 hover:border-orange-200 hover:bg-orange-50" onClick={() => handleProductClick(product)}>
+                        <div
+                          key={product.id}
+                          role="button"
+                          tabIndex={0}
+                          className={`transition-all duration-200 flex gap-2 p-3 bg-white rounded-2xl min-h-[108px] items-stretch border border-gray-100
+                            ${isOpen 
+                              ? 'hover:shadow-lg hover:scale-[1.02] hover:border-orange-200 hover:bg-orange-50 hover:cursor-pointer' 
+                              : 'cursor-not-allowed opacity-70'
+                            }`}
+                          onClick={!isOpen ? undefined : () => handleProductClick(product)}
+                        >
                           <img
                             alt="menu"
                             loading="lazy"
@@ -644,11 +664,16 @@ export default function RestaurantDetailPage() {
                             decoding="async"
                             className="rounded-2xl object-cover h-[110px]"
                             src={product.imageUrl || '/images/products/default.jpg'}
+                            style={{ 
+                              filter: !isOpen 
+                                ? 'grayscale(100%) brightness(0.8)' 
+                                : 'none',
+                              color: 'transparent'
+                            }}
                             onError={(e) => {
                               // Görsel yüklenemezse varsayılan ürürn görseline geç
                               (e.target as HTMLImageElement).src = '/images/products/default.jpg';
                             }}
-                            style={{color: 'transparent'}}
                           />
                           <div className="flex flex-col gap-1 flex-1 overflow-hidden">
                             <div className="flex flex-col gap-1">
@@ -670,9 +695,17 @@ export default function RestaurantDetailPage() {
                                     <span className="title-3-semibold text-primary">{product.price} TL</span>
                                   </div>
                                 </div>
-                                <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border disabled:cursor-not-allowed disabled:!text-neutral-light disabled:bg-neutral-lightest disabled:border-neutral-lightest hover:text-white text-orange-600 border-orange-600 bg-transparent hover:bg-orange-600 hover:border-orange-600 px-2 h-6 min-w-6 title-4-bold outline-none no-underline">
-                                  Sepete Ekle
-                                </button>
+                              <button
+  disabled={!isOpen}
+  className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border px-2 h-8 min-w-6 title-4-bold outline-none no-underline
+    ${isOpen
+      ? 'text-orange-600 border-orange-600 bg-transparent hover:text-white hover:bg-orange-600 hover:border-orange-600'
+      : 'cursor-not-allowed text-neutral-light bg-neutral-lightest border-neutral-lightest'
+    }`}
+>
+  Sepete Ekle
+</button>
+
                               </div>
                             </div>
                           </div>
@@ -700,7 +733,17 @@ export default function RestaurantDetailPage() {
                 {/* Menü Öğeleri - Yeni Tasarım */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-0 max-md:divide-y divide-neutral-lighter md:gap-4">
                   {filteredMenu.map((product) => (
-                    <div key={product.id} role="button" tabIndex={0} className="hover:cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex gap-2 p-3 bg-white rounded-2xl min-h-[108px] items-stretch border border-gray-100 hover:border-orange-200 hover:bg-orange-50" onClick={() => handleProductClick(product)}>
+                    <div
+                      key={product.id}
+                      role="button"
+                      tabIndex={0}
+                      className={`transition-all duration-200 flex gap-2 p-3 bg-white rounded-2xl min-h-[108px] items-stretch border border-gray-100
+                        ${isOpen 
+                          ? 'hover:shadow-lg hover:scale-[1.02] hover:border-orange-200 hover:bg-orange-50 hover:cursor-pointer' 
+                          : 'cursor-not-allowed opacity-70'
+                        }`}
+                      onClick={!isOpen ? undefined : () => handleProductClick(product)}
+                    >
                       <img
                         alt="menu"
                         loading="lazy"
@@ -709,7 +752,12 @@ export default function RestaurantDetailPage() {
                         decoding="async"
                         className="rounded-2xl object-cover h-[110px]"
                         src={product.imageUrl || '/placeholder-food.jpg'}
-                        style={{color: 'transparent'}}
+                        style={{ 
+                          filter: !isOpen 
+                            ? 'grayscale(100%) brightness(0.8)' 
+                            : 'none',
+                          color: 'transparent'
+                        }}
                       />
                       <div className="flex flex-col gap-1 flex-1 overflow-hidden">
                         <div className="flex flex-col gap-1">
@@ -731,7 +779,7 @@ export default function RestaurantDetailPage() {
                                 <span className="title-3-semibold text-primary">{product.price} TL</span>
                               </div>
                             </div>
-                            <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border disabled:cursor-not-allowed disabled:!text-neutral-light disabled:bg-neutral-lightest disabled:border-neutral-lightest hover:text-white text-orange-600 border-orange-600 bg-transparent hover:bg-orange-600 hover:border-orange-600 px-2 h-6 min-w-6 title-4-bold outline-none no-underline">
+                            <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border disabled:cursor-not-allowed disabled:!text-neutral-light disabled:bg-neutral-lightest disabled:border-neutral-lightest hover:text-white text-orange-600 border-orange-600 bg-transparent hover:bg-orange-600 hover:border-orange-600 px-2 h-6 min-w-6 title-4-bold outline-none no-underline" disabled={!isOpen}>
                               Sepete Ekle
                             </button>
                           </div>
@@ -775,6 +823,7 @@ export default function RestaurantDetailPage() {
           <Button
             size="lg"
             className="shadow-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold px-8 py-4 h-auto rounded-2xl border-4 border-white"
+            disabled={!isOpen}
           >
             <ShoppingCart className="h-6 w-6 mr-3" />
             <span className="text-lg">Sepet ({getTotalItems()})</span>

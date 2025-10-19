@@ -76,7 +76,7 @@ const ProductCard = ({ product, restaurantId, restaurant }: ProductCardProps) =>
 
   return (
     <>
-      <Card className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer" onClick={() => setIsDialogOpen(true)}>
+      <Card className={`overflow-hidden transition-shadow ${isRestaurantClosed ? 'cursor-not-allowed opacity-70' : 'hover:shadow-md cursor-pointer'}`} onClick={isRestaurantClosed ? undefined : () => setIsDialogOpen(true)}>
         <div className="flex h-full">
           <div className="flex-1 p-4">
             <h3 className="font-semibold mb-1">{product.name}</h3>
@@ -104,10 +104,22 @@ const ProductCard = ({ product, restaurantId, restaurant }: ProductCardProps) =>
                 src={product.image}
                 alt={product.name}
                 fill
-                className={`object-cover rounded ${isRestaurantClosed ? 'grayscale contrast-[1.2]' : ''}`}
+                className={`object-cover rounded`}
+                style={{ 
+                  filter: isRestaurantClosed 
+                    ? 'grayscale(100%) brightness(0.8)' 
+                    : 'none' 
+                }}
               />
             ) : (
-              <div className={`absolute inset-0 bg-gray-200 flex items-center justify-center ${isRestaurantClosed ? 'grayscale contrast-[1.2]' : ''}`}>
+              <div 
+                className={`absolute inset-0 bg-gray-200 flex items-center justify-center`}
+                style={{ 
+                  filter: isRestaurantClosed 
+                    ? 'grayscale(100%) brightness(0.8)' 
+                    : 'none' 
+                }}
+              >
                 <span className="text-xs text-gray-500">{product.name}</span>
               </div>
             )}
@@ -132,10 +144,22 @@ const ProductCard = ({ product, restaurantId, restaurant }: ProductCardProps) =>
                 src={product.image}
                 alt={product.name}
                 fill
-                className={`object-cover ${isRestaurantClosed ? 'grayscale contrast-[1.2]' : ''}`}
+                className={`object-cover`}
+                style={{ 
+                  filter: isRestaurantClosed 
+                    ? 'grayscale(100%) brightness(0.8)' 
+                    : 'none' 
+                }}
               />
             ) : (
-              <div className={`absolute inset-0 bg-gray-200 flex items-center justify-center ${isRestaurantClosed ? 'grayscale contrast-[1.2]' : ''}`}>
+              <div 
+                className={`absolute inset-0 bg-gray-200 flex items-center justify-center`}
+                style={{ 
+                  filter: isRestaurantClosed 
+                    ? 'grayscale(100%) brightness(0.8)' 
+                    : 'none' 
+                }}
+              >
                 <span className="text-gray-500">{product.name} Görsel</span>
               </div>
             )}
@@ -170,7 +194,7 @@ const ProductCard = ({ product, restaurantId, restaurant }: ProductCardProps) =>
               <Button 
                 variant="outline" 
                 size="icon" 
-                disabled={quantity <= 1} 
+                disabled={quantity <= 1 || isRestaurantClosed} 
                 onClick={() => setQuantity(quantity - 1)}
               >
                 <Minus className="h-4 w-4" />
@@ -179,6 +203,7 @@ const ProductCard = ({ product, restaurantId, restaurant }: ProductCardProps) =>
               <Button 
                 variant="outline" 
                 size="icon" 
+                disabled={isRestaurantClosed}
                 onClick={() => setQuantity(quantity + 1)}
               >
                 <Plus className="h-4 w-4" />
@@ -197,7 +222,7 @@ const ProductCard = ({ product, restaurantId, restaurant }: ProductCardProps) =>
               </div>
             </div>
             
-            <Button className="w-full" onClick={handleAddToCart}>
+            <Button className="w-full" onClick={handleAddToCart} disabled={isRestaurantClosed}>
               <ShoppingCart className="h-4 w-4 mr-2" />
               Sepete Ekle
             </Button>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -62,7 +62,7 @@ export default function RestaurantsContent() {
   }, []);
 
   // Kategorilere göre restoranları filtrele ve sırala
-  const getFilteredAndSortedRestaurants = () => {
+  const filteredRestaurants = useMemo(() => {
     let filtered = restaurants;
 
     // Kategori filtresi
@@ -154,7 +154,7 @@ export default function RestaurantsContent() {
     });
 
     return sorted;
-  };
+  }, [restaurants, selectedCategories, sortBy, minRating, deliveryTime, minOrderAmount, distance, paymentMethods, popularFilters]);
 
   // Kategori toggle fonksiyonu
   const toggleCategory = (category: string) => {
@@ -179,8 +179,8 @@ export default function RestaurantsContent() {
 
   // Kategorilere göre restoranları filtrele
   const getRestaurantsByCategory = (category: string) => {
-    if (category === 'all') return getFilteredAndSortedRestaurants();
-    return getFilteredAndSortedRestaurants().filter(restaurant => 
+    if (category === 'all') return filteredRestaurants;
+    return filteredRestaurants.filter(restaurant => 
       restaurant.categories?.some(cat => 
         cat.toLowerCase().includes(category.toLowerCase())
       ) || 
@@ -599,7 +599,7 @@ export default function RestaurantsContent() {
         {/* Sağ İçerik - Restoranlar */}
         <div className="flex-1">
           {/* Restoranlar */}
-          {getFilteredAndSortedRestaurants().length === 0 ? (
+          {filteredRestaurants.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-gray-400 mb-4">
                 <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -614,7 +614,7 @@ export default function RestaurantsContent() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {getFilteredAndSortedRestaurants().map(restaurant => (
+              {filteredRestaurants.map(restaurant => (
                 <RestaurantCard key={restaurant.id} restaurant={restaurant} />
               ))}
             </div>

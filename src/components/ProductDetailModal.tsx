@@ -237,6 +237,11 @@ export default function ProductDetailModal({
                     src={product.imageUrl || '/images/products/default.jpg'}
                     alt={product.name}
                     className="w-32 h-32 object-cover rounded-lg border border-neutral-lighter"
+                    style={{ 
+                      filter: !restaurantIsOpen 
+                        ? 'grayscale(100%) brightness(0.8)' 
+                        : 'none' 
+                    }}
                   />
                 </div>
                 <div className="flex-1 space-y-2">
@@ -491,14 +496,14 @@ export default function ProductDetailModal({
                   variant="outline"
                   onClick={handleAddToCart}
                   className="flex-1"
-                  disabled={!product.isAvailable}
+                  disabled={!restaurantIsOpen}
                 >
                   Hızlı Sipariş
                 </Button>
                 <Button
                   onClick={handleAddToCart}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
-                  disabled={!product.isAvailable}
+                  disabled={!restaurantIsOpen}
                 >
                   <ShoppingCart className="h-4 w-4 mr-2" />
                   Sepete Ekle
