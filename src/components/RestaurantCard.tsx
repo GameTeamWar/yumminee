@@ -17,6 +17,7 @@ interface RestaurantCardProps {
 const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
   const hasPromotion = restaurant.rating >= 4.5;
   const [hasActiveProducts, setHasActiveProducts] = useState(true);
+  const [productsWithOptions, setProductsWithOptions] = useState(0);
   
   // Ürün kontrolü yap (Real-time)
   useEffect(() => {
@@ -31,22 +32,26 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
     const unsubscribe = onSnapshot(productsQuery, (snapshot) => {
       const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
       const activeAndAvailableProducts = products.filter(p => p.isAvailable);
+      const productsWithOptionsCount = activeAndAvailableProducts.filter(p => p.options && p.options.length > 0).length;
       
       console.log('🔍 RestaurantCard Ürün kontrolü (Real-time):', {
         restaurantId: restaurant.id,
         totalProducts: products.length,
         availableProducts: activeAndAvailableProducts.length,
-        products: products.map(p => ({ id: p.id, name: p.name, isAvailable: p.isAvailable }))
+        productsWithOptions: productsWithOptionsCount,
+        products: products.map(p => ({ id: p.id, name: p.name, isAvailable: p.isAvailable, optionsCount: p.options?.length || 0 }))
       });
       
       // Detaylı ürün listesi
       console.table(products.map(p => ({ 
         'Ürün Adı': p.name, 
         'Mevcut': p.isAvailable ? '✅' : '❌',
+        'Opsiyon Sayısı': p.options?.length || 0,
         'ID': p.id.substring(0, 8) + '...'
       })));
       
       setHasActiveProducts(activeAndAvailableProducts.length > 0);
+      setProductsWithOptions(productsWithOptionsCount);
     }, (error) => {
       console.error('Ürün kontrolü hatası:', error);
     });
@@ -277,6 +282,16 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
                 ))}
               </div>
             ) : null}
+            {productsWithOptions > 0 && (
+              <div className="mt-1">
+                <span className="inline-flex items-center gap-1 text-purple-600 font-medium">
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                  </svg>
+                  {productsWithOptions} üründe seçenek mevcut
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Divider */}

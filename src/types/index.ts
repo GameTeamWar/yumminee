@@ -102,6 +102,12 @@ export interface ProductOption {
   price: number;
 }
 
+// Ürün malzemesi tipi
+export interface Ingredient {
+  name: string;
+  price?: number;
+}
+
 // Ürün tipi
 export interface Product {
   id: string;
@@ -118,6 +124,7 @@ export interface Product {
   options?: any[]; // Opsiyon grupları (güncellenmiş yapı)
   optionIds?: string[]; // Opsiyon ID'leri
   optionNames?: string[]; // Opsiyon isimleri
+  ingredients?: Ingredient[]; // Ürün malzemeleri
   isAvailable: boolean;
   allergens?: string[]; // Alerjenler
   nutritionalInfo?: {
@@ -156,6 +163,7 @@ export interface CartItem {
   imageUrl?: string;
   description?: string;
   options?: ProductOption[];
+  removedIngredients?: string[]; // Çıkarılan malzemeler
   rating?: number; // Ürün beğeni yüzdesi
   reviewCount?: number; // Değerlendirme sayısı
 }
@@ -181,6 +189,7 @@ export interface OrderItem {
   price: number;
   quantity: number;
   options?: ProductOption[];
+  removedIngredients?: string[]; // Çıkarılan malzemeler
   // Legacy compatibility fields for checkout
   productName?: string;
   productImage?: string;

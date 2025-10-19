@@ -39,8 +39,17 @@ interface Product {
   allergens?: string[]
   options?: string[]
   optionNames?: string[]
+  ingredients?: Ingredient[]
   restaurantId: string
   customId: string // 11-digit unique identifier
+}
+
+interface Ingredient {
+  id: string
+  name: string
+  isRemovable: boolean
+  isDefault: boolean
+  price?: number
 }
 
 interface Category {
@@ -365,7 +374,8 @@ export default function ProductsPage() {
                   <TableHead className="min-w-[120px] py-4 px-6 font-semibold text-gray-700">Kategori</TableHead>
                   <TableHead className="min-w-[150px] py-4 px-6 font-semibold text-gray-700">Malzemeler</TableHead>
                   <TableHead className="min-w-[120px] py-4 px-6 font-semibold text-gray-700">Opsiyonlar</TableHead>
-                  <TableHead className="min-w-[100px] py-4 px-6 font-semibold text-gray-700">Durum</TableHead>
+                  <TableHead className="min-w-[150px] py-4 px-6 font-semibold text-gray-700">Açıklama</TableHead>
+                  <TableHead className="min-w-[120px] py-4 px-6 font-semibold text-gray-700">Durum</TableHead>
                   <TableHead className="min-w-[80px] py-4 px-6 font-semibold text-gray-700">İşlemler</TableHead>
                 </TableRow>
               </TableHeader>
@@ -469,12 +479,24 @@ export default function ProductsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="py-4 px-6">
-                    <span
-                      className="text-sm text-gray-600 block max-w-xs leading-relaxed"
-                      title={product.description || 'Malzeme bilgisi yok'}
-                    >
-                      {product.description || 'Malzeme bilgisi yok'}
-                    </span>
+                    <div className="flex flex-wrap gap-2 max-w-xs">
+                      {product.ingredients && product.ingredients.length > 0 ? (
+                        <>
+                          {product.ingredients.slice(0, 3).map((ingredient, index) => (
+                            <Badge key={index} variant="secondary" className="text-xs px-2 py-1 bg-green-50 border-green-200 text-green-700 font-medium rounded-md capitalize">
+                              {ingredient.name}
+                            </Badge>
+                          ))}
+                          {product.ingredients.length > 3 && (
+                            <Badge variant="outline" className="text-xs px-2 py-1 bg-gray-50 border-gray-200 text-gray-600 font-medium rounded-md">
+                              +{product.ingredients.length - 3}
+                            </Badge>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-sm text-gray-500 font-medium">Malzeme yok</span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="py-4 px-6">
                     <div className="flex flex-wrap gap-2 max-w-xs">
@@ -495,6 +517,14 @@ export default function ProductsPage() {
                         <span className="text-sm text-gray-500 font-medium">Opsiyon yok</span>
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell className="py-4 px-6">
+                    <span
+                      className="text-sm text-gray-600 block max-w-xs leading-relaxed"
+                      title={product.description || 'Açıklama yok'}
+                    >
+                      {product.description || 'Açıklama yok'}
+                    </span>
                   </TableCell>
                   <TableCell className="py-4 px-6">
                     <div className="flex items-center justify-center">

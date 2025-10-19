@@ -139,7 +139,8 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         quantity: 1,
         imageUrl: product.imageUrl,
         description: product.description,
-        options: product.options
+        options: product.options,
+        removedIngredients: product.removedIngredients
       }];
     });
 

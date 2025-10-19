@@ -47,6 +47,7 @@ export default function ProductDetailModal({
   const [quantity, setQuantity] = useState(1);
   const [selectedOptions, setSelectedOptions] = useState<{[key: string]: string[]}>({});
   const [specialInstructions, setSpecialInstructions] = useState('');
+  const [removedIngredients, setRemovedIngredients] = useState<string[]>([]);
   const [showRestaurantClosed, setShowRestaurantClosed] = useState(false);
   const [showAddressRequired, setShowAddressRequired] = useState(false);
   const [optionGroups, setOptionGroups] = useState<any[]>([]);
@@ -58,6 +59,7 @@ export default function ProductDetailModal({
       setQuantity(1);
       setSelectedOptions({});
       setSpecialInstructions('');
+      setRemovedIngredients([]);
       setShowRestaurantClosed(false);
       setShowAddressRequired(false);
 
@@ -65,7 +67,7 @@ export default function ProductDetailModal({
       if (product.options && product.options.length > 0) {
         setOptionGroups(product.options);
       } else if (product.optionIds && product.optionIds.length > 0 && options.length > 0) {
-        const productOptions = options.filter(option => product.optionIds!.includes(option.customId));
+        const productOptions = options.filter(option => product.optionIds!.includes(option.id));
         setOptionGroups(productOptions);
       } else {
         setOptionGroups([]);
@@ -97,6 +99,16 @@ export default function ProductDetailModal({
           ...prev,
           [optionId]: [itemId]
         };
+      }
+    });
+  };
+
+  const handleIngredientToggle = (ingredientName: string) => {
+    setRemovedIngredients(prev => {
+      if (prev.includes(ingredientName)) {
+        return prev.filter(name => name !== ingredientName);
+      } else {
+        return [...prev, ingredientName];
       }
     });
   };
@@ -140,10 +152,6 @@ export default function ProductDetailModal({
   const handleAddToCart = async () => {
     if (!product || !restaurant) return;
 
-    console.log('Ürün mevcut mu:', product.isAvailable);
-    console.log('Seçilen opsiyonlar:', selectedOptions);
-    console.log('Opsiyon grupları:', optionGroups);
-
     // Restoran durumu kontrolü
     const { isOpen } = getRestaurantStatus(restaurant);
     if (!isOpen) {
@@ -161,11 +169,21 @@ export default function ProductDetailModal({
     if (!validateSelections()) return;
 
     try {
+      // Çıkarılan malzemeleri özel talimatlara ekle
+      let finalInstructions = specialInstructions.trim();
+      if (removedIngredients.length > 0) {
+        const removedText = `Çıkarılan malzemeler: ${removedIngredients.join(', ')}`;
+        finalInstructions = finalInstructions 
+          ? `${finalInstructions}\n\n${removedText}`
+          : removedText;
+      }
+
       // Ürünü özelleştirilmiş seçeneklerle sepete ekle
       const customizedProduct = {
         ...product,
         selectedOptions,
-        specialInstructions: specialInstructions.trim() || undefined,
+        removedIngredients,
+        specialInstructions: finalInstructions || undefined,
         totalPrice: calculateTotalPrice()
       };
 
@@ -288,14 +306,20 @@ export default function ProductDetailModal({
               {/* Opsiyonlar */}
               {optionGroups && optionGroups.length > 0 && (
                 <div className="space-y-5 mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                    <Label className="text-base font-semibold text-gray-900">
+                      Ürün Seçenekleri
+                    </Label>
+                  </div>
                   {optionGroups.map((optionGroup: any, index: number) => (
                     <div key={index} className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <Label className="text-base font-semibold text-gray-900">
+                        <Label className="text-sm font-semibold text-gray-800">
                           {optionGroup.name}
                         </Label>
                         {optionGroup.required && (
-                          <Badge variant="secondary" className="bg-orange-100 text-orange-700">
+                          <Badge variant="secondary" className="bg-orange-100 text-orange-700 text-xs">
                             Zorunlu
                           </Badge>
                         )}
@@ -353,6 +377,53 @@ export default function ProductDetailModal({
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Malzemeler */}
+              {product.ingredients && product.ingredients.length > 0 && (
+                <div className="space-y-3 mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <Label className="text-base font-semibold text-gray-900">
+                      Ürün Malzemeleri
+                    </Label>
+                  </div>
+                  <div className="space-y-2">
+                    {product.ingredients.map((ingredient, index) => (
+                      <div key={index} className="flex items-center space-x-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <Checkbox
+                          id={`ingredient-${index}`}
+                          checked={!removedIngredients.includes(ingredient.name)}
+                          onCheckedChange={() => handleIngredientToggle(ingredient.name)}
+                          className="data-[state=checked]:bg-green-600 data-[state=unchecked]:border-green-300"
+                        />
+                        <Label 
+                          htmlFor={`ingredient-${index}`} 
+                          className="flex-1 cursor-pointer flex justify-between items-center"
+                        >
+                          <span className="font-medium text-green-800 capitalize">
+                            {ingredient.name}
+                          </span>
+                          {ingredient.price && ingredient.price > 0 && (
+                            <span className="text-orange-600 font-medium">
+                              (+{ingredient.price.toFixed(2)} TL)
+                            </span>
+                          )}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    İstediğiniz malzemeleri çıkarabilirsiniz. Çıkarılan malzemeler sipariş notuna eklenecektir.
+                  </p>
+                  {removedIngredients.length > 0 && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-sm text-red-700 font-medium">
+                        Çıkarılan malzemeler: {removedIngredients.join(', ')}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 

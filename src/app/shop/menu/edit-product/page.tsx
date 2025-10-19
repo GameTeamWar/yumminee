@@ -31,6 +31,12 @@ export default function EditProductPage() {
   const [options, setOptions] = useState<any[]>([]);
   const [restaurant, setRestaurant] = useState<any>(null);
   const [newAllergen, setNewAllergen] = useState('');
+  const [newIngredient, setNewIngredient] = useState({
+    name: '',
+    isRemovable: true,
+    isDefault: true,
+    price: ''
+  });
   const [originalProductPrice, setOriginalProductPrice] = useState<number | null>(null);
 
   // Form state
@@ -41,6 +47,7 @@ export default function EditProductPage() {
     originalPrice: '',
     categoryIds: [] as string[],
     optionIds: [] as string[],
+    ingredients: [] as Ingredient[],
     imageUrl: '',
     isAvailable: true,
     preparationTime: '',
@@ -63,6 +70,14 @@ export default function EditProductPage() {
     'Soya',
     'Susam'
   ];
+
+  interface Ingredient {
+    id: string;
+    name: string;
+    isRemovable: boolean;
+    isDefault: boolean;
+    price?: number;
+  }
 
   // Load restaurant and related data
   useEffect(() => {
@@ -99,6 +114,7 @@ export default function EditProductPage() {
           originalPrice: product.originalPrice?.toString() || '',
           categoryIds: product.categoryIds || [],
           optionIds: product.optionIds || [],
+          ingredients: product.ingredients || [],
           imageUrl: product.imageUrl || '',
           isAvailable: product.isAvailable !== false,
           preparationTime: product.preparationTime?.toString() || '',
@@ -111,7 +127,7 @@ export default function EditProductPage() {
         // Kategorileri yükle
         const categoriesQuery = query(
           collection(db, 'categories'),
-          where('restaurantId', '==', restaurantData.id),
+          where('restaurantId', '==', restaurantData.ownerId || restaurantData.id),
           where('isActive', '==', true)
         );
 
@@ -197,6 +213,46 @@ export default function EditProductPage() {
     }));
   };
 
+  const handleAddIngredient = () => {
+    if (!newIngredient.name.trim()) return;
+
+    const ingredient: Ingredient = {
+      id: Date.now().toString(),
+      name: newIngredient.name.trim(),
+      isRemovable: newIngredient.isRemovable,
+      isDefault: newIngredient.isDefault,
+      price: newIngredient.price ? parseFloat(newIngredient.price) : undefined
+    };
+
+    setProductData(prev => ({
+      ...prev,
+      ingredients: [...prev.ingredients, ingredient]
+    }));
+
+    setNewIngredient({
+      name: '',
+      isRemovable: true,
+      isDefault: true,
+      price: ''
+    });
+  };
+
+  const handleRemoveIngredient = (ingredientId: string) => {
+    setProductData(prev => ({
+      ...prev,
+      ingredients: prev.ingredients.filter(ing => ing.id !== ingredientId)
+    }));
+  };
+
+  const handleUpdateIngredient = (ingredientId: string, field: keyof Ingredient, value: any) => {
+    setProductData(prev => ({
+      ...prev,
+      ingredients: prev.ingredients.map(ing =>
+        ing.id === ingredientId ? { ...ing, [field]: value } : ing
+      )
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -214,33 +270,47 @@ export default function EditProductPage() {
       setIsLoading(true);
 
       // Get selected categories and options
-      const selectedCategories = productData.categoryIds.map(id =>
+      const selectedCategories = (productData.categoryIds || []).map(id =>
         categories.find(cat => cat.id === id)
       ).filter(Boolean);
 
-      const selectedOptions = productData.optionIds.map(id =>
+      const selectedOptions = (productData.optionIds || []).map(id =>
         options.find(opt => opt.id === id)
       ).filter(Boolean);
 
-      // Prepare product data for Firebase
-      const productToUpdate = {
-        name: productData.name,
-        description: productData.description,
-        price: parseFloat(productData.price),
+      // Prepare product data for Firebase - ensure no undefined values
+      const productToUpdate: any = {
+        name: productData.name || '',
+        description: productData.description || '',
+        price: parseFloat(productData.price) || 0,
         originalPrice: productData.originalPrice ? parseFloat(productData.originalPrice) : null,
-        categoryIds: productData.categoryIds,
-        categoryNames: selectedCategories.map(cat => cat.name),
-        optionIds: productData.optionIds,
-        optionNames: selectedOptions.map(opt => opt.name),
-        imageUrl: productData.imageUrl,
-        isActive: productData.isAvailable,
+        categoryIds: productData.categoryIds || [],
+        categoryNames: selectedCategories.map(cat => cat?.name).filter(Boolean) || [],
+        optionIds: productData.optionIds || [],
+        optionNames: selectedOptions.map(opt => opt?.name).filter(Boolean) || [],
+        ingredients: (productData.ingredients || []).map(ing => ({
+          id: ing?.id || '',
+          name: ing?.name || '',
+          isRemovable: ing?.isRemovable || false,
+          isDefault: ing?.isDefault || false,
+          price: ing?.price || null
+        })),
+        imageUrl: productData.imageUrl || '',
+        isActive: productData.isAvailable !== false,
         preparationTime: productData.preparationTime ? parseInt(productData.preparationTime) : null,
         brand: productData.brand || null,
         vatRate: productData.vatRate ? parseInt(productData.vatRate) : null,
         specialCategory: productData.specialCategory || null,
-        allergens: productData.allergens,
+        allergens: productData.allergens || [],
         updatedAt: new Date()
       };
+
+      // Remove any undefined values from the object
+      Object.keys(productToUpdate).forEach(key => {
+        if (productToUpdate[key] === undefined) {
+          delete productToUpdate[key];
+        }
+      });
 
       // Update in Firebase
       await updateDoc(doc(db, 'products', productId), productToUpdate);
@@ -467,6 +537,137 @@ export default function EditProductPage() {
                 placeholder="Ürün Açıklaması Giriniz"
                 rows={5}
               />
+            </div>
+
+            {/* Malzemeler */}
+            <div>
+              <Label className="mb-2">Ürün Malzemeleri</Label>
+              <Card className="border border-gray-200">
+                <CardContent className="p-4">
+                  {/* Yeni malzeme ekleme */}
+                  <div className="space-y-3 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div className="md:col-span-2">
+                        <Input
+                          placeholder="Malzeme adı"
+                          value={newIngredient.name}
+                          onChange={(e) => setNewIngredient(prev => ({ ...prev, name: e.target.value }))}
+                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddIngredient())}
+                          className="capitalize"
+                        />
+                      </div>
+                      <div>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="Ek fiyat (opsiyonel)"
+                          value={newIngredient.price}
+                          onChange={(e) => setNewIngredient(prev => ({ ...prev, price: e.target.value }))}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          onClick={handleAddIngredient}
+                          disabled={!newIngredient.name.trim()}
+                          size="sm"
+                          className="flex-1"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Ekle
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="isDefault"
+                          checked={newIngredient.isDefault}
+                          onCheckedChange={(checked) => setNewIngredient(prev => ({ ...prev, isDefault: checked as boolean }))}
+                        />
+                        <Label htmlFor="isDefault" className="text-sm">
+                          <span className="font-medium">Varsayılan dahil</span>
+                          <span className="text-gray-500 text-xs block">Ürünle birlikte gelir</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="isRemovable"
+                          checked={newIngredient.isRemovable}
+                          onCheckedChange={(checked) => setNewIngredient(prev => ({ ...prev, isRemovable: checked as boolean }))}
+                        />
+                        <Label htmlFor="isRemovable" className="text-sm">
+                          <span className="font-medium">Müşteri çıkarabilir</span>
+                          <span className="text-gray-500 text-xs block">Müşteri bu malzemeyi çıkarabilir</span>
+                        </Label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mevcut malzemeler */}
+                  {productData.ingredients.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Eklenen Malzemeler:</Label>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {productData.ingredients.map((ingredient) => (
+                          <div key={ingredient.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{ingredient.name}</span>
+                                {ingredient.price && ingredient.price > 0 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +₺{ingredient.price.toFixed(2)}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 mt-1">
+                                <div className="flex items-center space-x-1">
+                                  <Checkbox
+                                    id={`default-${ingredient.id}`}
+                                    checked={ingredient.isDefault}
+                                    onCheckedChange={(checked) => handleUpdateIngredient(ingredient.id, 'isDefault', checked)}
+                                  />
+                                  <Label htmlFor={`default-${ingredient.id}`} className="text-xs">
+                                    <span className="font-medium">Varsayılan</span>
+                                    <span className="text-gray-500 block">Ürünle gelir</span>
+                                  </Label>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  <Checkbox
+                                    id={`removable-${ingredient.id}`}
+                                    checked={ingredient.isRemovable}
+                                    onCheckedChange={(checked) => handleUpdateIngredient(ingredient.id, 'isRemovable', checked)}
+                                  />
+                                  <Label htmlFor={`removable-${ingredient.id}`} className="text-xs">
+                                    <span className="font-medium">Çıkarılabilir</span>
+                                    <span className="text-gray-500 block">Müşteri çıkarabilir</span>
+                                  </Label>
+                                </div>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRemoveIngredient(ingredient.id)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {productData.ingredients.length === 0 && (
+                    <div className="text-center py-6 text-gray-500">
+                      <p className="text-sm">Henüz malzeme eklenmemiş</p>
+                      <p className="text-xs mt-1">Ürününüze malzeme ekleyerek müşterilerin kişiselleştirme yapmasını sağlayın</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
 
             {/* Kategoriler */}
@@ -783,21 +984,23 @@ export default function EditProductPage() {
         </Card>
 
         {/* Submit Button */}
-        <div className="flex justify-end space-x-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.back()}
-          >
-            İptal
-          </Button>
-          <Button
-            type="submit"
-            disabled={isLoading}
-            className="bg-orange-600 hover:bg-orange-700"
-          >
-            {isLoading ? 'Güncelleniyor...' : 'Ürünü Güncelle'}
-          </Button>
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 -mx-6 -mb-6 mt-8 shadow-lg">
+          <div className="flex justify-end space-x-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.back()}
+            >
+              İptal
+            </Button>
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {isLoading ? 'Güncelleniyor...' : 'Ürünü Güncelle'}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

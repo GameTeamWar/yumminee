@@ -98,6 +98,13 @@ export default function RestaurantDetailPage() {
 
         setRestaurant(normalizedRestaurant);
 
+        console.log('Restoran yüklendi:', {
+          id: normalizedRestaurant.id,
+          name: normalizedRestaurant.name,
+          isOpen: normalizedRestaurant.isOpen,
+          openingHours: normalizedRestaurant.openingHours
+        });
+
         // Menü bilgilerini al - gerçek zamanlı
         const menuQuery = query(
           collection(db, 'products'),
@@ -171,22 +178,22 @@ export default function RestaurantDetailPage() {
       return;
     }
 
+    console.log('Restaurant ownerId:', restaurant.ownerId);
+    console.log('Restaurant id:', restaurant.id);
     const optionsQuery = query(
       collection(db, 'options'),
-      where('restaurantId', '==', restaurant.ownerId),
+      where('restaurantId', '==', restaurant.id),
       where('isActive', '==', true),
       orderBy('sortOrder')
     );
 
-    const unsubscribeOptions = onSnapshot(optionsQuery, (snapshot) => {
-      const optionsData: any[] = [];
-      snapshot.forEach((doc) => {
-        optionsData.push({ id: doc.id, ...doc.data() });
-      });
-      setOptions(optionsData);
+  const unsubscribeOptions = onSnapshot(optionsQuery, (snapshot) => {
+    const optionsData: any[] = [];
+    snapshot.forEach((doc) => {
+      optionsData.push({ id: doc.id, ...doc.data() });
     });
-
-    return () => unsubscribeOptions();
+    setOptions(optionsData);
+  });    return () => unsubscribeOptions();
   }, [restaurant]);
   useEffect(() => {
     let unsubscribeAddresses: (() => void) | undefined;
@@ -369,6 +376,7 @@ export default function RestaurantDetailPage() {
   }
 
   const { isOpen, statusText } = getRestaurantStatus(restaurant);
+  console.log('Restoran durumu kontrolü:', { isOpen, statusText, restaurant: { isOpen: restaurant?.isOpen, openingHours: restaurant?.openingHours } });
 
   return (
     <div className="min-h-screen bg-gray-100">

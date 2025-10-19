@@ -89,7 +89,11 @@ const ProductCard = ({ product, restaurantId, restaurant }: ProductCardProps) =>
                 <span className="font-medium">{product.price.toFixed(2)} TL</span>
               </div>
               {product.options && product.options.length > 0 && (
-                <span className="text-xs text-gray-500 ml-1">+ seçenekler</span>
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                    +{product.options.length} seçenek
+                  </span>
+                </div>
               )}
             </div>
           </div>

@@ -117,8 +117,19 @@ export function getRestaurantStatus(restaurant: { openingHours?: WorkingHours; i
 } {
   // Eğer manuel olarak açık/kapalı durumu varsa onu kullan (genel toggle)
   if (restaurant.isOpen !== undefined) {
-    // Genel olarak kapalıysa, hangi nedenle olursa olsun kapalı
+    // Genel olarak kapalıysa, çalışma saatlerini kontrol et
     if (!restaurant.isOpen) {
+      // Çalışma saatlerine göre açık mı kontrol et
+      if (restaurant.openingHours) {
+        const isOpenByHours = isRestaurantOpenBasedOnHours(restaurant.openingHours);
+        if (isOpenByHours) {
+          // Saatlere göre açık, manuel kapatmaya rağmen açık kabul edelim
+          return {
+            isOpen: true,
+            statusText: 'Açık'
+          };
+        }
+      }
       return {
         isOpen: false,
         statusText: 'Kapalı'
