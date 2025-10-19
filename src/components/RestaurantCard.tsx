@@ -102,6 +102,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
                 src={restaurant.image}
                 alt={restaurant.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                style={{ filter: !isOpen ? 'grayscale(100%)' : 'none' }}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/images/restaurants/default.jpg';
                 }}

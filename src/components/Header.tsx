@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { ChevronDown, MapPin, User, Search, ShoppingCart, Menu } from 'lucide-react';
 import { AddressSelectionModal } from './AddressSelectionModal';
+import CartDrawer from './CartDrawer';
 
 const Header = () => {
   const { user, signOut, userProfile, currentRole, switchRole } = useAuth();
@@ -27,6 +28,7 @@ const Header = () => {
   const [selectedAddress, setSelectedAddress] = useState<CustomerAddress | null>(null);
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
+  const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const { getTotalItems } = useCart();
   const { getAvailableRoles: fetchAvailableRoles } = useAuth();
 
@@ -361,20 +363,19 @@ const Header = () => {
             )}
 
             {/* Sepetim */}
-            <Link href="/cart">
-              <Button 
-                variant="ghost" 
-                className="flex items-center space-x-1 text-gray-700 hover:text-orange-600 px-2 lg:px-3 relative"
-              >
-                <ShoppingCart className="h-4 w-4" />
-                <span className="hidden sm:inline text-sm font-medium">Sepetim</span>
-                {getTotalItems() > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-orange-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                    {getTotalItems()}
-                  </span>
-                )}
-              </Button>
-            </Link>
+            <Button
+              variant="ghost"
+              onClick={() => setCartDrawerOpen(true)}
+              className="flex items-center space-x-1 text-gray-700 hover:text-orange-600 px-2 lg:px-3 relative"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              <span className="hidden sm:inline text-sm font-medium">Sepetim</span>
+              {getTotalItems() > 0 && (
+                <span className="absolute -top-1 -right-1 bg-orange-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                  {getTotalItems()}
+                </span>
+              )}
+            </Button>
 
             {/* Mobile Menu Button */}
             <button 
@@ -411,6 +412,12 @@ const Header = () => {
           </nav>
         </div>
       )}
+
+      {/* Cart Drawer */}
+      <CartDrawer
+        isOpen={cartDrawerOpen}
+        onClose={() => setCartDrawerOpen(false)}
+      />
     </header>
   );
 };

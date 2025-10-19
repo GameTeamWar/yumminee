@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { CartItem } from '@/types';
 import { toast } from 'sonner';
 import { useAuth } from './AuthContext';
-import { subscribeToUserCart, addToCart as addToCartDB, removeFromCart as removeFromCartFirestore, updateCartItemQuantity, clearUserCart } from '@/lib/firebase/db';
+import { subscribeToUserCart, addToCartFirestore as addToCartDB, removeFromCart as removeFromCartFirestore, updateCartItemQuantity, clearUserCart } from '@/lib/firebase/db';
 
 interface CartContextType {
   cart: CartItem[];
@@ -14,6 +14,7 @@ interface CartContextType {
   removeFromCart: (productId: string) => Promise<void>;
   updateQuantity: (productId: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
+  updateCartItemInfo: (productId: string, updates: Partial<CartItem>) => void;
   getTotalItems: () => number;
   getTotalPrice: () => number;
 }
@@ -74,9 +75,11 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
           // Convert Firestore cart items to local cart format
           const firestoreCart = cartItems.map((item: any) => ({
             productId: item.productId,
-            name: item.name,
-            price: item.price,
+            name: item.name || item.productName,
+            price: Number(item.price) || Number(item.unitPrice) || 0,
             quantity: item.quantity,
+            imageUrl: item.productImage || item.imageUrl,
+            description: item.description || item.productDescription,
             options: item.options || []
           }));
           setCart(firestoreCart);
@@ -132,8 +135,10 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
       return [...prev, {
         productId: product.id,
         name: product.name,
-        price: product.price,
+        price: Number(product.price) || 0,
         quantity: 1,
+        imageUrl: product.imageUrl,
+        description: product.description,
         options: product.options
       }];
     });
@@ -141,17 +146,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     // Update Firestore if user is logged in
     if (user?.uid) {
       try {
-        await addToCartDB(user.uid, {
-          shopId: restaurantId,
-          productId: product.id,
-          productName: product.name,
-          productImage: product.imageUrl,
-          quantity: 1,
-          unitPrice: product.price,
-          selectedOptions: [],
-          restaurantId: restaurantId,
-          restaurantName: restaurantName
-        });
+        await addToCartDB(user.uid, product, restaurantId, restaurantName);
       } catch (error) {
         console.error('Firestore cart update failed:', error);
         // Don't show error to user, local cart is still updated
@@ -228,9 +223,13 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   };
 
-  const getTotalPrice = () => {
-    return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const updateCartItemInfo = (productId: string, updates: Partial<CartItem>) => {
+    setCart(prev => prev.map(item =>
+      item.productId === productId ? { ...item, ...updates } : item
+    ));
   };
+
+  const getTotalPrice = () => cart.reduce((sum, item) => sum + (Number(item.price) || 0) * item.quantity, 0);
 
   const value: CartContextType = {
     cart,
@@ -240,6 +239,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     removeFromCart,
     updateQuantity,
     clearCart,
+    updateCartItemInfo,
     getTotalItems,
     getTotalPrice,
   };

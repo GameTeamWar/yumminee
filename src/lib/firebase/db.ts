@@ -1649,13 +1649,14 @@ export const clearUserCart = clearCart;
 
 // Additional cart functions for CartContext
 export const addToCartFirestore = async (customerId: string, product: any, shopId: string, shopName: string) => {
-  const cartItem: Omit<CartItem, 'id' | 'customerId' | 'createdAt' | 'updatedAt'> = {
+  const cartItem: any = {
     shopId,
     productId: product.id,
     productName: product.name,
     productImage: product.imageUrl,
+    description: product.description,
     quantity: 1,
-    unitPrice: product.price,
+    unitPrice: Number(product.price) || 0,
     selectedOptions: [], // This would need to be populated based on selected options
     restaurantId: shopId, // Legacy compatibility
     restaurantName: shopName // Legacy compatibility

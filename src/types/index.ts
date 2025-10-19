@@ -150,7 +150,11 @@ export interface CartItem {
   name: string;
   price: number;
   quantity: number;
+  imageUrl?: string;
+  description?: string;
   options?: ProductOption[];
+  rating?: number; // Ürün beğeni yüzdesi
+  reviewCount?: number; // Değerlendirme sayısı
 }
 
 // Sipariş durumu

@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import {
   Plus,
@@ -47,6 +48,7 @@ export default function ProductDetailModal({
   const [showRestaurantClosed, setShowRestaurantClosed] = useState(false);
   const [showAddressRequired, setShowAddressRequired] = useState(false);
   const [optionGroups, setOptionGroups] = useState<any[]>([]);
+  const [showReportDropdown, setShowReportDropdown] = useState(false);
 
   useEffect(() => {
     if (isOpen && product) {
@@ -120,7 +122,7 @@ export default function ProductDetailModal({
 
     // Zorunlu opsiyonları kontrol et
     for (const optionGroup of optionGroups) {
-      if (optionGroup.isRequired) {
+      if (optionGroup.required) {
         const selectedItems = selectedOptions[optionGroup.id] || [];
         if (selectedItems.length === 0) {
           toast.error(`${optionGroup.name} seçimi zorunludur`);
@@ -177,6 +179,11 @@ export default function ProductDetailModal({
     setQuantity(prev => prev > 1 ? prev - 1 : 1);
   };
 
+  const handleReport = (reason: string) => {
+    toast.success(`"${reason}" şikayeti bildirildi. Teşekkür ederiz!`);
+    setShowReportDropdown(false);
+  };
+
   if (!product || !restaurant) return null;
 
   const { isOpen: restaurantIsOpen, statusText } = getRestaurantStatus(restaurant);
@@ -187,21 +194,10 @@ export default function ProductDetailModal({
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden p-0">
           <div className="flex flex-col h-full max-h-[90vh]">
-            {/* Header */}
             <DialogHeader className="px-6 py-5 border-b border-neutral-lighter">
-              <div className="flex items-center justify-between">
-                <DialogTitle className="text-xl font-semibold text-gray-900">
-                  Ürün Detayları
-                </DialogTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onClose}
-                  className="h-8 w-8 p-0"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              <DialogTitle className="text-xl font-semibold text-gray-900">
+                Ürün Detayları
+              </DialogTitle>
             </DialogHeader>
 
             {/* Scrollable Content */}
@@ -229,10 +225,41 @@ export default function ProductDetailModal({
                         </span>
                       )}
                     </div>
-                    <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
-                      <AlertTriangle className="h-4 w-4 mr-1" />
-                      Bildir
-                    </Button>
+                    <DropdownMenu open={showReportDropdown} onOpenChange={setShowReportDropdown}>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
+                          <AlertTriangle className="h-4 w-4 mr-1" />
+                          Bildir
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-80 p-4" align="end">
+                        <div className="caption text-neutral-dark mb-3">Şikayet Nedenini Seçin</div>
+                        <DropdownMenuItem
+                          onClick={() => handleReport('Haksız fiyatlandırma / fiyat hatalı')}
+                          className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
+                        >
+                          Haksız fiyatlandırma / fiyat hatalı
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleReport('Ürün seçenekleri eksik / hatalı')}
+                          className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
+                        >
+                          Ürün seçenekleri eksik / hatalı
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleReport('Ürün ismi veya açıklaması eksik / hatalı')}
+                          className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
+                        >
+                          Ürün ismi veya açıklaması eksik / hatalı
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleReport('Ürün görseli hatalı')}
+                          className="cursor-pointer rounded-pill px-4 py-2 hover:bg-primary-contrast"
+                        >
+                          Ürün görseli hatalı
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </div>
@@ -246,7 +273,7 @@ export default function ProductDetailModal({
                         <Label className="text-base font-semibold text-gray-900">
                           {optionGroup.name}
                         </Label>
-                        {optionGroup.isRequired && (
+                        {optionGroup.required && (
                           <Badge variant="secondary" className="bg-orange-100 text-orange-700">
                             Zorunlu
                           </Badge>

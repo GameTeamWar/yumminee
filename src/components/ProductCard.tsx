@@ -10,7 +10,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useCartStore } from '@/lib/store/cart-store';
-import { ProductOption } from '@/types';
+import { ProductOption, Restaurant } from '@/types';
+import { getRestaurantStatus } from '@/hooks/useAutoRestaurantStatus';
 
 interface Product {
   id: string;
@@ -25,14 +26,19 @@ interface Product {
 interface ProductCardProps {
   product: Product;
   restaurantId: string;
+  restaurant?: Restaurant;
 }
 
-const ProductCard = ({ product, restaurantId }: ProductCardProps) => {
+const ProductCard = ({ product, restaurantId, restaurant }: ProductCardProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState<ProductOption[]>([]);
   const [quantity, setQuantity] = useState(1);
   
   const addItem = useCartStore((state) => state.addItem);
+  
+  // Restaurant durumunu kontrol et
+  const restaurantStatus = restaurant ? getRestaurantStatus(restaurant) : { isOpen: true };
+  const isRestaurantClosed = !restaurantStatus.isOpen;
   
   const handleAddToCart = () => {
     addItem(restaurantId, {
@@ -89,9 +95,18 @@ const ProductCard = ({ product, restaurantId }: ProductCardProps) => {
           </div>
           
           <div className="relative w-24 h-24 bg-gray-100">
-            <div className="absolute inset-0 bg-gray-200 flex items-center justify-center">
-              <span className="text-xs text-gray-500">{product.name}</span>
-            </div>
+            {product.image ? (
+              <Image
+                src={product.image}
+                alt={product.name}
+                fill
+                className={`object-cover rounded ${isRestaurantClosed ? 'grayscale contrast-[1.2]' : ''}`}
+              />
+            ) : (
+              <div className={`absolute inset-0 bg-gray-200 flex items-center justify-center ${isRestaurantClosed ? 'grayscale contrast-[1.2]' : ''}`}>
+                <span className="text-xs text-gray-500">{product.name}</span>
+              </div>
+            )}
           </div>
         </div>
       </Card>
@@ -108,9 +123,18 @@ const ProductCard = ({ product, restaurantId }: ProductCardProps) => {
           
           {/* Ürün Görseli */}
           <div className="relative h-48 w-full mb-4 bg-gray-200">
-            <div className="absolute inset-0 bg-gray-200 flex items-center justify-center">
-              <span className="text-gray-500">{product.name} Görsel</span>
-            </div>
+            {product.image ? (
+              <Image
+                src={product.image}
+                alt={product.name}
+                fill
+                className={`object-cover ${isRestaurantClosed ? 'grayscale contrast-[1.2]' : ''}`}
+              />
+            ) : (
+              <div className={`absolute inset-0 bg-gray-200 flex items-center justify-center ${isRestaurantClosed ? 'grayscale contrast-[1.2]' : ''}`}>
+                <span className="text-gray-500">{product.name} Görsel</span>
+              </div>
+            )}
           </div>
           
           {/* Ürün Seçenekleri */}
