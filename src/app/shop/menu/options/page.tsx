@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, where, getDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
+import { getRestaurantByOwnerId } from '@/lib/firebase/db'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,10 +18,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Plus, Edit, Trash2, Save, X, Search, MoreHorizontal, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Edit, Save, X, Search, MoreHorizontal, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { generateUniqueEntityId } from '@/lib/utils/idGenerator'
-import { deleteOptionAndUpdateProducts } from '@/lib/firebase/db'
 
 interface Option {
   id: string
@@ -47,8 +47,9 @@ interface OptionValue {
 export default function OptionsPage() {
   const { user } = useAuth()
   const [options, setOptions] = useState<Option[]>([])
+  const [restaurant, setRestaurant] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'passive'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'passive'>('active')
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set())
   const [expandedOptionId, setExpandedOptionId] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -73,22 +74,40 @@ export default function OptionsPage() {
       return
     }
 
-    const q = query(
-      collection(db, 'options'),
-      where('restaurantId', '==', user.uid),
-      orderBy('sortOrder', 'asc')
-    )
+    const loadRestaurantData = async () => {
+      try {
+        // Önce restoranı bul
+        const restaurantData = await getRestaurantByOwnerId(user.uid);
+        if (!restaurantData) {
+          console.error('Restoran bulunamadı');
+          setLoading(false);
+          return;
+        }
+        setRestaurant(restaurantData);
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const optionsData: Option[] = []
-      querySnapshot.forEach((doc) => {
-        optionsData.push({ id: doc.id, ...doc.data() } as Option)
-      })
-      setOptions(optionsData)
-      setLoading(false)
-    })
+        const q = query(
+          collection(db, 'options'),
+          where('restaurantId', '==', restaurantData.id),
+          orderBy('sortOrder', 'asc')
+        )
 
-    return () => unsubscribe()
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+          const optionsData: Option[] = []
+          querySnapshot.forEach((doc) => {
+            optionsData.push({ id: doc.id, ...doc.data() } as Option)
+          })
+          setOptions(optionsData)
+          setLoading(false)
+        })
+
+        return () => unsubscribe()
+      } catch (error) {
+        console.error('Restoran verileri yüklenirken hata:', error);
+        setLoading(false);
+      }
+    };
+
+    loadRestaurantData();
   }, [user?.uid])
 
   const resetForm = () => {
@@ -138,7 +157,7 @@ export default function OptionsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!user?.uid) {
+    if (!user?.uid || !restaurant) {
       toast.error('Restoran bilgisi bulunamadı')
       return
     }
@@ -157,7 +176,7 @@ export default function OptionsPage() {
     try {
       let optionData: any = {
         ...formData,
-        restaurantId: user.uid
+        restaurantId: restaurant.id
       }
 
       if (editingOption) {
@@ -167,7 +186,7 @@ export default function OptionsPage() {
         toast.success('Opsiyon güncellendi')
       } else {
         // Yeni opsiyon - custom ID oluştur
-        const customId = await generateUniqueEntityId('options', user.uid, db)
+        const customId = await generateUniqueEntityId('options', restaurant.id, db)
         optionData.customId = customId
         await addDoc(collection(db, 'options'), optionData)
         toast.success('Opsiyon eklendi')
@@ -197,23 +216,6 @@ export default function OptionsPage() {
       sortOrder: option.sortOrder
     })
     setIsDialogOpen(true)
-  }
-
-  const handleDelete = async (optionId: string) => {
-    if (!user?.uid) {
-      toast.error('Restoran bilgisi bulunamadı');
-      return;
-    }
-
-    if (!confirm('Bu opsiyonu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz ve bu opsiyonu kullanan ürünlerden çıkarılacaktır.')) return;
-
-    try {
-      await deleteOptionAndUpdateProducts(user.uid, optionId);
-      toast.success('Opsiyon silindi ve ilgili ürünler güncellendi');
-    } catch (error) {
-      console.error('Error deleting option:', error);
-      toast.error('Opsiyon silinirken hata oluştu');
-    }
   }
 
   const toggleActive = async (option: Option) => {
@@ -346,23 +348,7 @@ export default function OptionsPage() {
     }
   }
 
-  const handleBulkDelete = async () => {
-    if (selectedOptions.size === 0) return
-    if (!confirm(`${selectedOptions.size} opsiyonu silmek istediğinizden emin misiniz?`)) return
-    try {
-      const promises = Array.from(selectedOptions).map(optionId =>
-        deleteOptionAndUpdateProducts(user?.uid || '', optionId)
-      )
-      await Promise.all(promises)
-      toast.success(`${selectedOptions.size} opsiyon silindi`)
-      setSelectedOptions(new Set())
-    } catch (error) {
-      console.error('Bulk delete error:', error)
-      toast.error('Opsiyonlar silinirken hata oluştu')
-    }
-  }
-
-  if (loading) {
+  if (loading || !restaurant) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -373,7 +359,7 @@ export default function OptionsPage() {
     )
   }
 
-  if (!user?.uid) {
+  if (!user?.uid || !restaurant) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -384,183 +370,228 @@ export default function OptionsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="ml-6">
-          <h1 className="text-3xl font-bold">Opsiyon Yönetimi</h1>
-          <p className="text-muted-foreground">Ürün seçeneklerini yönetin</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="w-4 h-4 mr-2" />
-              Yeni Opsiyon
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingOption ? 'Opsiyon Düzenle' : 'Yeni Opsiyon'}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Opsiyon Adı *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+    <div className="space-y-8 p-6">
+      {/* Modern Header */}
+      <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-xl p-6 text-white shadow-lg">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Opsiyon Yönetimi</h1>
+            <p className="text-orange-100">Ürün seçeneklerini yönetin ve özelleştirin</p>
+          </div>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button
+                onClick={resetForm}
+                className="bg-white text-orange-500 hover:bg-orange-50 border-0 shadow-md"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Yeni Opsiyon
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingOption ? 'Opsiyon Düzenle' : 'Yeni Opsiyon'}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="type">Opsiyon Türü</Label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={(value: 'single' | 'multiple' | 'text') =>
-                      setFormData({ ...formData, type: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="single">Tek Seçim</SelectItem>
-                      <SelectItem value="multiple">Çoklu Seçim</SelectItem>
-                      <SelectItem value="text">Metin Girişi</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="sortOrder">Sıralama</Label>
+                  <Label htmlFor="name">Opsiyon Adı *</Label>
                   <Input
-                    id="sortOrder"
-                    type="number"
-                    value={formData.sortOrder}
-                    onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
                   />
                 </div>
-              </div>
 
-              {formData.type !== 'text' && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="required">Zorunlu</Label>
-                    <Switch
-                      id="required"
-                      checked={formData.required}
-                      onCheckedChange={(checked) => setFormData({ ...formData, required: checked })}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Opsiyon Türü</Label>
+                    <Select
+                      value={formData.type}
+                      onValueChange={(value: 'single' | 'multiple' | 'text') =>
+                        setFormData({ ...formData, type: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="single">Tek Seçim</SelectItem>
+                        <SelectItem value="multiple">Çoklu Seçim</SelectItem>
+                        <SelectItem value="text">Metin Girişi</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="sortOrder">Sıralama</Label>
+                    <Input
+                      id="sortOrder"
+                      type="number"
+                      value={formData.sortOrder}
+                      onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
                     />
                   </div>
+                </div>
 
-                  {formData.type === 'multiple' && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="minSelections">Min. Seçim</Label>
-                        <Input
-                          id="minSelections"
-                          type="number"
-                          value={formData.minSelections}
-                          onChange={(e) => setFormData({ ...formData, minSelections: parseInt(e.target.value) || 0 })}
-                          min="0"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="maxSelections">Max. Seçim</Label>
-                        <Input
-                          id="maxSelections"
-                          type="number"
-                          value={formData.maxSelections}
-                          onChange={(e) => setFormData({ ...formData, maxSelections: parseInt(e.target.value) || 1 })}
-                          min="1"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-4">
+                {formData.type !== 'text' && (
+                  <>
                     <div className="flex items-center justify-between">
-                      <Label>Seçenekler</Label>
-                      <Button type="button" variant="outline" size="sm" onClick={addOptionValue}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Seçenek Ekle
-                      </Button>
+                      <Label htmlFor="required">Zorunlu</Label>
+                      <Switch
+                        id="required"
+                        checked={formData.required}
+                        onCheckedChange={(checked) => setFormData({ ...formData, required: checked })}
+                      />
                     </div>
 
-                    {formData.values.map((value, index) => (
-                      <div key={value.id} className="flex items-center gap-2 p-2 border rounded">
-                        <Input
-                          placeholder="Seçenek adı"
-                          value={value.name}
-                          onChange={(e) => updateOptionValue(index, 'name', e.target.value)}
-                          className="flex-1"
-                        />
-                        <Input
-                          type="number"
-                          placeholder="Fiyat"
-                          value={value.price}
-                          onChange={(e) => updateOptionValue(index, 'price', parseFloat(e.target.value) || 0)}
-                          className="w-24"
-                          step="0.01"
-                        />
-                        <div className="flex items-center gap-2">
-                          <Label className="text-xs">Aktif</Label>
-                          <Switch
-                            checked={value.isActive !== undefined ? value.isActive : true}
-                            onCheckedChange={(checked) => updateOptionValue(index, 'isActive', checked)}
+                    {formData.type === 'multiple' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="minSelections">Min. Seçim</Label>
+                          <Input
+                            id="minSelections"
+                            type="number"
+                            value={formData.minSelections}
+                            onChange={(e) => setFormData({ ...formData, minSelections: parseInt(e.target.value) || 0 })}
+                            min="0"
                           />
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeOptionValue(index)}
-                        >
-                          <X className="w-4 h-4" />
+                        <div className="space-y-2">
+                          <Label htmlFor="maxSelections">Max. Seçim</Label>
+                          <Input
+                            id="maxSelections"
+                            type="number"
+                            value={formData.maxSelections}
+                            onChange={(e) => setFormData({ ...formData, maxSelections: parseInt(e.target.value) || 1 })}
+                            min="1"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label>Seçenekler</Label>
+                        <Button type="button" variant="outline" size="sm" onClick={addOptionValue}>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Seçenek Ekle
                         </Button>
                       </div>
-                    ))}
-                  </div>
-                </>
-              )}
 
-              <div className="flex items-center justify-between">
-                <Label htmlFor="isActive">Aktif/Pasif</Label>
-                <Switch
-                  id="isActive"
-                  checked={formData.isActive}
-                  onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
-                />
-              </div>
+                      {formData.values.map((value, index) => (
+                        <div key={value.id} className="flex items-center gap-2 p-2 border rounded">
+                          <Input
+                            placeholder="Seçenek adı"
+                            value={value.name}
+                            onChange={(e) => updateOptionValue(index, 'name', e.target.value)}
+                            className="flex-1"
+                          />
+                          <Input
+                            type="number"
+                            placeholder="Fiyat"
+                            value={value.price}
+                            onChange={(e) => updateOptionValue(index, 'price', parseFloat(e.target.value) || 0)}
+                            className="w-24"
+                            step="0.01"
+                          />
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs">Aktif</Label>
+                            <Switch
+                              checked={value.isActive !== undefined ? value.isActive : true}
+                              onCheckedChange={(checked) => updateOptionValue(index, 'isActive', checked)}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeOptionValue(index)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
 
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  <X className="w-4 h-4 mr-2" />
-                  İptal
-                </Button>
-                <Button type="submit">
-                  <Save className="w-4 h-4 mr-2" />
-                  {editingOption ? 'Güncelle' : 'Kaydet'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="isActive">Aktif/Pasif</Label>
+                  <Switch
+                    id="isActive"
+                    checked={formData.isActive}
+                    onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-2">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    <X className="w-4 h-4 mr-2" />
+                    İptal
+                  </Button>
+                  <Button type="submit">
+                    <Save className="w-4 h-4 mr-2" />
+                    {editingOption ? 'Güncelle' : 'Kaydet'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-          <Input
-            placeholder="Opsiyon ara..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder="Opsiyon ara..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white shadow-md">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 text-sm font-medium">Toplam Opsiyon</p>
+              <p className="text-2xl font-bold">{statusCounts.all}</p>
+            </div>
+            <div className="p-2 bg-blue-400 bg-opacity-30 rounded-lg">
+              <Plus className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 text-white shadow-md">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-100 text-sm font-medium">Aktif Opsiyon</p>
+              <p className="text-2xl font-bold">{statusCounts.active}</p>
+            </div>
+            <div className="p-2 bg-green-400 bg-opacity-30 rounded-lg">
+              <Edit className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-r from-gray-500 to-gray-600 rounded-lg p-4 text-white shadow-md">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-100 text-sm font-medium">Pasif Opsiyon</p>
+              <p className="text-2xl font-bold">{statusCounts.passive}</p>
+            </div>
+            <div className="p-2 bg-gray-400 bg-opacity-30 rounded-lg">
+              <X className="w-6 h-6" />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -572,7 +603,7 @@ export default function OptionsPage() {
           <TabsTrigger value="passive">Pasif Opsiyonlar ({statusCounts.passive})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={statusFilter} className="space-y-4">
+        <TabsContent value={statusFilter} className="space-y-6">
           {/* Bulk Operations */}
           {selectedOptions.size > 0 && (
             <div className="flex items-center gap-2 p-4 bg-muted rounded-lg">
@@ -591,99 +622,92 @@ export default function OptionsPage() {
                   <DropdownMenuItem onClick={handleBulkDeactivate}>
                     Pasif Yap
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleBulkDelete} className="text-destructive">
-                    Sil
-                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           )}
 
           {/* Table */}
-          <div className="border rounded-lg">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
+              <TableHeader className="bg-gray-50">
+                <TableRow className="hover:bg-gray-50">
+                  <TableHead className="w-12 py-4 px-6">
                     <Checkbox
                       checked={paginatedOptions.length > 0 && selectedOptions.size === paginatedOptions.length}
                       onCheckedChange={handleSelectAll}
                     />
                   </TableHead>
-                  <TableHead>İsim</TableHead>
-                  <TableHead>Ürünler</TableHead>
-                  <TableHead>İçerikler</TableHead>
-                  <TableHead>Min-Max Sayısı</TableHead>
-                  <TableHead className="w-32">İşlemler</TableHead>
+                  <TableHead className="py-4 px-6">İsim</TableHead>
+                  <TableHead className="py-4 px-6">Ürünler</TableHead>
+                  <TableHead className="py-4 px-6">İçerikler</TableHead>
+                  <TableHead className="py-4 px-6">Min-Max Sayısı</TableHead>
+                  <TableHead className="w-32 py-4 px-6">İşlemler</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedOptions.map((option) => (
-                  <TableRow key={option.id}>
-                    <TableCell>
+                  <TableRow key={option.id} className="hover:bg-orange-50 transition-colors duration-150">
+                    <TableCell className="py-4 px-6">
                       <Checkbox
                         checked={selectedOptions.has(option.id)}
                         onCheckedChange={(checked) => handleSelectOption(option.id, checked as boolean)}
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-4 px-6">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{option.name}</span>
-                        <Badge variant={option.isActive ? 'default' : 'secondary'}>
+                        <span className="font-medium text-gray-900">{option.name}</span>
+                        <Badge variant={option.isActive ? 'default' : 'secondary'} className={option.isActive ? 'bg-green-100 text-green-800 hover:bg-green-200' : ''}>
                           {option.isActive ? 'Aktif' : 'Pasif'}
                         </Badge>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-4 px-6">
                       <span className="text-sm text-muted-foreground">-</span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-4 px-6">
                       <div className="text-sm">
                         {option.type === 'text' ? (
-                          'Metin girişi'
+                          <span className="text-gray-600">Metin girişi</span>
                         ) : (
                           <div className="space-y-1">
                             {(option.values || []).slice(0, 2).map(v => (
                               <div key={v.id} className="flex items-center gap-2">
-                                <span>{v.name}</span>
-                                <span className="text-muted-foreground">({v.price}₺)</span>
+                                <span className="text-gray-900">{v.name}</span>
+                                <span className="text-orange-600 font-medium">({v.price}₺)</span>
                               </div>
                             ))}
                             {(option.values || []).length > 2 && (
-                              <span className="text-muted-foreground">+{(option.values || []).length - 2} daha</span>
+                              <span className="text-muted-foreground text-xs">+{(option.values || []).length - 2} daha</span>
                             )}
                           </div>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-4 px-6">
                       {option.type !== 'text' ? (
-                        `${option.minSelections || 1} - ${option.maxSelections || 1}`
+                        <span className="text-gray-700 font-medium">
+                          {option.minSelections || 1} - {option.maxSelections || 1}
+                        </span>
                       ) : (
-                        '-'
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-4 px-6">
                       <div className="flex items-center gap-2">
                         <Switch
                           checked={option.isActive}
                           onCheckedChange={() => toggleActive(option)}
+                          className="data-[state=checked]:bg-green-500"
                         />
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleEdit(option)}
                           title="Düzenle"
+                          className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"
                         >
                           <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDelete(option.id)}
-                          title="Sil"
-                        >
-                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -743,6 +767,8 @@ export default function OptionsPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Delete Confirmation Modal */}
     </div>
   )
 }

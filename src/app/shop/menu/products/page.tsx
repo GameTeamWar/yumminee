@@ -21,17 +21,9 @@ import {
   Eye,
   Package,
   DollarSign,
-  MoreHorizontal,
   Filter,
   Edit
 } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 
 interface Product {
   id: string
@@ -230,38 +222,101 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="ml-6">
-          <h1 className="text-3xl font-bold">Ürün Yönetimi</h1>
-          <p className="text-muted-foreground">Menünüzdeki ürünleri yönetin</p>
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl p-6 border border-orange-200">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold text-gray-900">Ürün Yönetimi</h1>
+          <p className="text-muted-foreground text-lg">Menünüzdeki ürünleri yönetin ve düzenleyin</p>
         </div>
-        <Button onClick={() => router.push('/shop/menu/add-product?panel=' + new URLSearchParams(window.location.search).get('panel'))}>
-          <Plus className="w-4 h-4 mr-2" />
-          Yeni Ürün
+        <Button
+          onClick={() => router.push('/shop/menu/add-product?panel=' + new URLSearchParams(window.location.search).get('panel'))}
+          className="bg-orange-600 hover:bg-orange-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 px-6 py-3 rounded-lg font-medium"
+        >
+          <Plus className="w-5 h-5 mr-2" />
+          Yeni Ürün Ekle
         </Button>
+      </div>
 
+      {/* Stats */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100 border-0 shadow-sm hover:shadow-md transition-all duration-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <p className="text-3xl font-bold text-blue-900">{products.length}</p>
+                <p className="text-sm font-medium text-blue-700">Toplam Ürün</p>
+              </div>
+              <div className="p-3 bg-blue-500 rounded-xl shadow-sm">
+                <Package className="h-6 w-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden bg-gradient-to-br from-green-50 to-green-100 border-0 shadow-sm hover:shadow-md transition-all duration-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <p className="text-3xl font-bold text-green-900">{products.filter(p => p.isAvailable).length}</p>
+                <p className="text-sm font-medium text-green-700">Aktif Ürün</p>
+              </div>
+              <div className="p-3 bg-green-500 rounded-xl shadow-sm">
+                <Eye className="h-6 w-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden bg-gradient-to-br from-orange-50 to-orange-100 border-0 shadow-sm hover:shadow-md transition-all duration-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <p className="text-3xl font-bold text-orange-900">
+                  ₺{(products.reduce((sum, p) => sum + p.price, 0) / Math.max(products.length, 1)).toFixed(2)}
+                </p>
+                <p className="text-sm font-medium text-orange-700">Ürünlerin Ortalama Fiyatı</p>
+              </div>
+              <div className="p-3 bg-orange-500 rounded-xl shadow-sm">
+                <DollarSign className="h-6 w-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden bg-gradient-to-br from-purple-50 to-purple-100 border-0 shadow-sm hover:shadow-md transition-all duration-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <p className="text-3xl font-bold text-purple-900">{categories.length}</p>
+                <p className="text-sm font-medium text-purple-700">Aktif Kategori</p>
+              </div>
+              <div className="p-3 bg-purple-500 rounded-xl shadow-sm">
+                <Filter className="h-6 w-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
+      <Card className="shadow-sm border-0 bg-white/80 backdrop-blur-sm">
+        <CardContent className="p-6">
+          <div className="flex flex-col lg:flex-row gap-6">
             {/* Search */}
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
               <Input
                 placeholder="Ürün adı veya açıklama ile ara..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-12 h-12 text-base border-gray-200 focus:border-orange-300 focus:ring-orange-200 rounded-lg"
               />
             </div>
 
             {/* Category Filter */}
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-full lg:w-56 h-12 border-gray-200 focus:border-orange-300 focus:ring-orange-200 rounded-lg">
                 <SelectValue placeholder="Kategori seçin" />
               </SelectTrigger>
               <SelectContent>
@@ -277,7 +332,7 @@ export default function ProductsPage() {
 
             {/* Availability Filter */}
             <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-full lg:w-56 h-12 border-gray-200 focus:border-orange-300 focus:ring-orange-200 rounded-lg">
                 <SelectValue placeholder="Durum" />
               </SelectTrigger>
               <SelectContent>
@@ -291,64 +346,66 @@ export default function ProductsPage() {
       </Card>
 
       {/* Products Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ürünler</CardTitle>
-          <CardDescription>
-            Toplam {filteredProducts.length} ürün bulundu
+      <Card className="shadow-sm border-0 bg-white/80 backdrop-blur-sm">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl font-semibold text-gray-900">Ürünler</CardTitle>
+          <CardDescription className="text-base">
+            Toplam <span className="font-semibold text-orange-600">{filteredProducts.length}</span> ürün bulundu
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-20">Görsel</TableHead>
-                  <TableHead className="min-w-[100px]">İsim</TableHead>
-                  <TableHead className="min-w-[100px]">Tahmini Hazırlama Süresi</TableHead>
-                  <TableHead className="min-w-[100px]">Fiyat</TableHead>
-                  <TableHead className="min-w-[100px]">Kategori</TableHead>
-                  <TableHead className="min-w-[100px]">Malzemeler</TableHead>
-                  <TableHead className="min-w-[100px]">Opsiyonlar</TableHead>
-                  <TableHead className="min-w-[100px]">Durum</TableHead>
-                  <TableHead className="min-w-[10px]">İşlemler</TableHead>
+                <TableRow className="bg-gray-50/80 hover:bg-gray-50/80 border-b border-gray-200">
+                  <TableHead className="w-20 py-4 px-6 font-semibold text-gray-700">Görsel</TableHead>
+                  <TableHead className="min-w-[120px] py-4 px-6 font-semibold text-gray-700">İsim</TableHead>
+                  <TableHead className="min-w-[140px] py-4 px-6 font-semibold text-gray-700">Hazırlama Süresi</TableHead>
+                  <TableHead className="min-w-[120px] py-4 px-6 font-semibold text-gray-700">Fiyat</TableHead>
+                  <TableHead className="min-w-[120px] py-4 px-6 font-semibold text-gray-700">Kategori</TableHead>
+                  <TableHead className="min-w-[150px] py-4 px-6 font-semibold text-gray-700">Malzemeler</TableHead>
+                  <TableHead className="min-w-[120px] py-4 px-6 font-semibold text-gray-700">Opsiyonlar</TableHead>
+                  <TableHead className="min-w-[100px] py-4 px-6 font-semibold text-gray-700">Durum</TableHead>
+                  <TableHead className="min-w-[80px] py-4 px-6 font-semibold text-gray-700">İşlemler</TableHead>
                 </TableRow>
               </TableHeader>
             <TableBody>
               {filteredProducts.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell>
+                <TableRow key={product.id} className="hover:bg-orange-50/50 transition-colors duration-150 border-b border-gray-100">
+                  <TableCell className="py-4 px-6">
                     {product.imageUrl ? (
-                      <img
-                        src={product.imageUrl}
-                        alt={product.name}
-                        className="w-12 h-12 object-cover rounded-lg"
-                        onError={(e) => {
-                          e.currentTarget.src = '/images/products/default.jpg'
-                        }}
-                      />
+                      <div className="relative group">
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-14 h-14 object-cover rounded-xl shadow-sm group-hover:shadow-md transition-shadow duration-200"
+                          onError={(e) => {
+                            e.currentTarget.src = '/images/products/default.jpg'
+                          }}
+                        />
+                      </div>
                     ) : (
-                      <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                        <Package className="w-6 h-6 text-gray-400" />
+                      <div className="w-14 h-14 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center shadow-sm">
+                        <Package className="w-7 h-7 text-gray-400" />
                       </div>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <span className="font-medium text-sm capitalize">{product.name}</span>
+                  <TableCell className="py-4 px-6">
+                    <span className="font-semibold text-gray-900 text-base capitalize leading-tight">{product.name}</span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="py-4 px-6">
                     {product.preparationTime ? (
-                      <Badge variant="outline" className="text-xs px-2 py-1 w-fit bg-orange-50 border-orange-200 text-orange-700">
+                      <Badge variant="outline" className="text-sm px-3 py-1 bg-orange-50 border-orange-200 text-orange-700 font-medium rounded-lg">
                         {product.preparationTime} dk
                       </Badge>
                     ) : (
-                      <span className="text-xs text-gray-400">-</span>
+                      <span className="text-sm text-gray-400 font-medium">-</span>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
+                  <TableCell className="py-4 px-6">
+                    <div className="flex items-center gap-3">
                       {product.originalPrice && product.originalPrice > product.price && (
-                        <span className="text-sm text-gray-500 line-through">
+                        <span className="text-sm text-gray-500 line-through font-medium">
                           ₺{product.originalPrice.toFixed(2)}
                         </span>
                       )}
@@ -359,7 +416,7 @@ export default function ProductsPage() {
                             step="0.01"
                             value={priceInputValue}
                             onChange={(e) => setPriceInputValue(e.target.value)}
-                            className="w-20 h-8 text-sm"
+                            className="w-24 h-9 text-sm border-gray-200 focus:border-orange-300 focus:ring-orange-200 rounded-md"
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -373,7 +430,7 @@ export default function ProductsPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => handlePriceSave(product.id)}
-                            className="h-8 px-2"
+                            className="h-9 px-3 bg-green-50 border-green-200 text-green-700 hover:bg-green-100 rounded-md"
                           >
                             ✓
                           </Button>
@@ -381,14 +438,14 @@ export default function ProductsPage() {
                             size="sm"
                             variant="outline"
                             onClick={handlePriceCancel}
-                            className="h-8 px-2"
+                            className="h-9 px-3 bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 rounded-md"
                           >
                             ✕
                           </Button>
                         </div>
                       ) : (
-                        <span 
-                          className="font-semibold text-green-600 cursor-pointer hover:text-green-700"
+                        <span
+                          className="font-bold text-green-600 cursor-pointer hover:text-green-700 text-lg transition-colors duration-150"
                           onClick={() => handlePriceEdit(product.id, product.price)}
                         >
                           ₺{product.price.toFixed(2)}
@@ -396,102 +453,107 @@ export default function ProductsPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
+                  <TableCell className="py-4 px-6">
+                    <div className="flex flex-wrap gap-2">
                       {product.categoryNames && product.categoryNames.length > 0 ? (
                         product.categoryNames.map((name, index) => (
-                          <Badge key={index} variant="outline" className="text-xs capitalize">
+                          <Badge key={index} variant="outline" className="text-xs px-2 py-1 bg-blue-50 border-blue-200 text-blue-700 font-medium rounded-md capitalize">
                             {name}
                           </Badge>
                         ))
                       ) : (
-                        <Badge variant="outline" className="text-xs text-gray-500">
+                        <Badge variant="outline" className="text-xs px-2 py-1 bg-gray-50 border-gray-200 text-gray-500 font-medium rounded-md">
                           Kategorisiz
                         </Badge>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <span 
-                      className="text-sm text-gray-600 block max-w-xs truncate" 
+                  <TableCell className="py-4 px-6">
+                    <span
+                      className="text-sm text-gray-600 block max-w-xs leading-relaxed"
                       title={product.description || 'Malzeme bilgisi yok'}
                     >
                       {product.description || 'Malzeme bilgisi yok'}
                     </span>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1 max-w-xs">
+                  <TableCell className="py-4 px-6">
+                    <div className="flex flex-wrap gap-2 max-w-xs">
                       {product.optionNames && product.optionNames.length > 0 ? (
                         <>
                           {product.optionNames.slice(0, 2).map((option, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs px-1 py-0 capitalize">
+                            <Badge key={index} variant="secondary" className="text-xs px-2 py-1 bg-purple-50 border-purple-200 text-purple-700 font-medium rounded-md capitalize">
                               {option}
                             </Badge>
                           ))}
                           {product.optionNames.length > 2 && (
-                            <Badge variant="outline" className="text-xs px-1 py-0">
+                            <Badge variant="outline" className="text-xs px-2 py-1 bg-gray-50 border-gray-200 text-gray-600 font-medium rounded-md">
                               +{product.optionNames.length - 2}
                             </Badge>
                           )}
                         </>
                       ) : (
-                        <span className="text-xs text-gray-500">Opsiyon yok</span>
+                        <span className="text-sm text-gray-500 font-medium">Opsiyon yok</span>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="py-4 px-6">
                     <div className="flex items-center justify-center">
                       <Switch
                         checked={product.isAvailable}
                         onCheckedChange={() => handleToggleAvailability(product)}
+                        className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-gray-300"
                       />
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => router.push(`/shop/menu/edit-product?id=${product.id}&panel=${new URLSearchParams(window.location.search).get('panel')}`)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Düzenle
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => handleDelete(product.id)}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Sil
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                  <TableCell className="py-4 px-6">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => router.push(`/shop/menu/edit-product?id=${product.id}&panel=${new URLSearchParams(window.location.search).get('panel')}`)}
+                        className="h-9 w-9 p-0 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors duration-150"
+                        title="Ürünü düzenle"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(product.id)}
+                        className="h-9 w-9 p-0 hover:bg-red-100 text-red-600 rounded-lg transition-colors duration-150"
+                        title="Ürünü sil"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
             </Table>
           </div>          {filteredProducts.length === 0 && (
-            <div className="text-center py-12">
-              <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">
+            <div className="text-center py-16">
+              <div className="mx-auto w-24 h-24 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center mb-6">
+                <Package className="h-12 w-12 text-orange-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">
                 {searchTerm || selectedCategory !== 'all' || availabilityFilter !== 'all'
                   ? 'Arama kriterlerinize uygun ürün bulunamadı'
                   : 'Henüz ürün eklenmemiş'
                 }
               </h3>
-              <p className="text-muted-foreground mb-4">
+              <p className="text-muted-foreground text-base mb-6 max-w-md mx-auto">
                 {searchTerm || selectedCategory !== 'all' || availabilityFilter !== 'all'
                   ? 'Filtrelerinizi değiştirerek farklı ürünler arayabilirsiniz.'
                   : 'İlk ürününüzü ekleyerek menünüzü oluşturmaya başlayın.'
                 }
               </p>
               {(!searchTerm && selectedCategory === 'all' && availabilityFilter === 'all') && (
-                <Button onClick={() => router.push('/shop/menu/add-product?panel=' + new URLSearchParams(window.location.search).get('panel'))}>
-                  <Plus className="h-4 w-4 mr-2" />
+                <Button
+                  onClick={() => router.push('/shop/menu/add-product?panel=' + new URLSearchParams(window.location.search).get('panel'))}
+                  className="bg-orange-600 hover:bg-orange-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 px-6 py-3 rounded-lg font-medium"
+                >
+                  <Plus className="h-5 w-5 mr-2" />
                   İlk Ürünü Ekle
                 </Button>
               )}
@@ -499,59 +561,6 @@ export default function ProductsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <Package className="h-8 w-8 text-blue-600 mr-3" />
-              <div>
-                <p className="text-2xl font-bold">{products.length}</p>
-                <p className="text-sm text-muted-foreground">Toplam Ürün</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <Eye className="h-8 w-8 text-green-600 mr-3" />
-              <div>
-                <p className="text-2xl font-bold">{products.filter(p => p.isAvailable).length}</p>
-                <p className="text-sm text-muted-foreground">Aktif Ürün</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <DollarSign className="h-8 w-8 text-orange-600 mr-3" />
-              <div>
-                <p className="text-2xl font-bold">
-                  ₺{(products.reduce((sum, p) => sum + p.price, 0) / Math.max(products.length, 1)).toFixed(2)}
-                </p>
-                <p className="text-sm text-muted-foreground">Ortalama Fiyat</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <Filter className="h-8 w-8 text-purple-600 mr-3" />
-              <div>
-                <p className="text-2xl font-bold">{categories.length}</p>
-                <p className="text-sm text-muted-foreground">Aktif Kategori</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   )
 }

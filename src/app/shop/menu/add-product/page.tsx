@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import { uploadImage } from '@/lib/firebase/storage';
 export default function AddProductPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
   const [options, setOptions] = useState<any[]>([]);
@@ -80,7 +81,7 @@ export default function AddProductPage() {
         // Kategorileri yükle
         const categoriesQuery = query(
           collection(db, 'categories'),
-          where('shopId', '==', restaurantData.id),
+          where('restaurantId', '==', restaurantData.id),
           where('isActive', '==', true)
         );
 
@@ -95,7 +96,7 @@ export default function AddProductPage() {
         // Opsiyonları yükle
         const optionsQuery = query(
           collection(db, 'options'),
-          where('shopId', '==', restaurantData.id),
+          where('restaurantId', '==', restaurantData.id),
           where('isActive', '==', true)
         );
 
@@ -104,6 +105,8 @@ export default function AddProductPage() {
             id: doc.id,
             ...doc.data()
           }));
+          console.log('Loaded options:', optionsData);
+          console.log('Restaurant ID:', restaurantData.id);
           setOptions(optionsData);
         });
 
@@ -295,45 +298,55 @@ export default function AddProductPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Ürün Adı */}
-            <div>
-              <Label htmlFor="name">Ürün Adı *</Label>
-              <Input
-                id="name"
-                value={productData.name}
-                onChange={(e) => setProductData(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Ürün Adı Giriniz"
-                required
-                className="capitalize"
-              />
+            {/* Ürün Adı ve Fiyat */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="name" className="mb-2">Ürün Adı *</Label>
+                <Input
+                  id="name"
+                  value={productData.name}
+                  onChange={(e) => setProductData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Ürün Adı Giriniz"
+                  required
+                  className="capitalize"
+                />
+              </div>
+              <div>
+                <Label htmlFor="price" className="mb-2">Satış Fiyatı *</Label>
+                <Input
+                className='w-41'
+                  id="price"
+                  type="number"
+                  step="0.01"
+                  value={productData.price}
+                  onChange={(e) => setProductData(prev => ({ ...prev, price: e.target.value }))}
+                  placeholder="0.00"
+                  required
+                />
+               
+              </div>
+              
             </div>
+          
 
-            {/* Fiyatlar */}
-            <div className="space-y-4">
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <Label htmlFor="price">Satış Fiyatı *</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    value={productData.price}
-                    onChange={(e) => setProductData(prev => ({ ...prev, price: e.target.value }))}
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs">
-                  Uygulamada görünen fiyatlardır.
-                </Badge>
-              </div>
+            {/* Hazırlama Süresi */}
+            <div>
+              <Label htmlFor="preparationTime" className="mb-2">Ürün Hazırlama Süresi (dakika)</Label>
+              <Input
+               className='w-52'
+                id="preparationTime"
+                type="number"
+                min="0"
+                value={productData.preparationTime}
+                onChange={(e) => setProductData(prev => ({ ...prev, preparationTime: e.target.value }))}
+                placeholder="örn: 15"
+               
+              />
             </div>
 
             {/* Ürün Görseli */}
             <div>
-              <Label>Ürün Görseli</Label>
+              <Label className="mb-2">Ürün Görseli</Label>
               <div className="flex gap-4 mt-2">
                 <div>
                   {productData.imageUrl ? (
@@ -357,18 +370,22 @@ export default function AddProductPage() {
                     <div className="w-36 h-36 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors">
                       <Upload className="h-8 w-8 text-gray-400 mb-2" />
                       <p className="text-sm text-gray-600 text-center">Görsel Ekle</p>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        className="mt-2"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Dosya Seç
+                      </Button>
                       <Input
+                        ref={fileInputRef}
                         type="file"
                         accept="image/*"
                         onChange={handleImageUpload}
                         className="hidden"
-                        id="image-upload"
                       />
-                      <Label htmlFor="image-upload" className="cursor-pointer">
-                        <Button type="button" variant="outline" size="sm" className="mt-2">
-                          Dosya Seç
-                        </Button>
-                      </Label>
                     </div>
                   )}
                 </div>
@@ -387,7 +404,7 @@ export default function AddProductPage() {
 
             {/* Ürün Açıklaması */}
             <div>
-              <Label htmlFor="description">Ürün Açıklaması</Label>
+              <Label htmlFor="description" className="mb-2">Ürün Açıklaması</Label>
               <Textarea
                 id="description"
                 value={productData.description}
@@ -400,7 +417,7 @@ export default function AddProductPage() {
             {/* Kategoriler */}
             <div className="grid grid-cols-1 gap-4">
               <div>
-                <Label htmlFor="category">Ürünün Bulunduğu Kategori *</Label>
+                <Label htmlFor="category" className="mb-2">Ürünün Bulunduğu Kategori *</Label>
                 <div className="flex gap-2">
                   <Popover>
                     <PopoverTrigger asChild>
@@ -460,7 +477,7 @@ export default function AddProductPage() {
 
               {/* Opsiyonlar */}
               <div>
-                <Label htmlFor="options">Ürün Opsiyonları</Label>
+                <Label htmlFor="options" className="mb-2">Ürün Opsiyonları</Label>
                 <div className="flex gap-2">
                   <Popover>
                     <PopoverTrigger asChild>
@@ -472,6 +489,9 @@ export default function AddProductPage() {
                           const validOptionIds = productData.optionIds.filter(id =>
                             options.some(opt => opt.id === id)
                           );
+                          console.log('Valid option IDs:', validOptionIds);
+                          console.log('All options:', options);
+                          console.log('Product option IDs:', productData.optionIds);
                           return validOptionIds.length > 0
                             ? `${validOptionIds.length} opsiyon seçildi`
                             : options.length > 0
@@ -499,6 +519,10 @@ export default function AddProductPage() {
                               </Label>
                             </div>
                           ))}
+                          {(() => {
+                            console.log('Rendering options in popover:', options);
+                            return null;
+                          })()}
                           {options.length === 0 && (
                             <p className="text-sm text-gray-500">Henüz opsiyon eklenmemiş</p>
                           )}
@@ -535,7 +559,7 @@ export default function AddProductPage() {
             {/* Marka ve KDV */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="brand">Ürünün Markası</Label>
+                <Label htmlFor="brand" className="mb-2">Ürünün Markası</Label>
                 <Select value={productData.brand} onValueChange={(value) => setProductData(prev => ({ ...prev, brand: value }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seçiniz" />
@@ -619,7 +643,7 @@ export default function AddProductPage() {
               </div>
 
               <div>
-                <Label htmlFor="vatRate">KDV Oranı</Label>
+                <Label htmlFor="vatRate" className="mb-2">KDV Oranı</Label>
                 <Select value={productData.vatRate} onValueChange={(value) => setProductData(prev => ({ ...prev, vatRate: value }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seçiniz" />

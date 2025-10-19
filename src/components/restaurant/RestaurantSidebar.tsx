@@ -18,7 +18,8 @@ import {
   Package,
   ChevronDown,
   Power,
-  PowerOff
+  PowerOff,
+  AlertTriangle
 } from 'lucide-react';
 import {
   Dialog,
@@ -33,11 +34,12 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
-import { getRestaurantByOwnerId, updateRestaurant } from '@/lib/firebase/db';
+import { getRestaurantByOwnerId, updateRestaurant, getProductsByShop } from '@/lib/firebase/db';
 import { db } from '@/lib/firebase/config';
 import { Restaurant } from '@/types';
+import type { Product } from '@/lib/firebase/db';
 import { toast } from 'sonner';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { useAutoRestaurantStatus } from '@/hooks/useAutoRestaurantStatus';
 import { isRestaurantOpenBasedOnHours } from '@/lib/utils/restaurantHours';
 
@@ -114,9 +116,69 @@ export default function RestaurantSidebar() {
   const [remainingTime, setRemainingTime] = useState<number>(0);
   const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null);
   const [isCancelTimerModalOpen, setIsCancelTimerModalOpen] = useState(false);
+  const [systemClosedReason, setSystemClosedReason] = useState<string>('');
 
   // Otomatik restoran durumu hook'u
   useAutoRestaurantStatus(restaurant);
+
+  // Ürün kontrolü - Aktif ve mevcut ürün var mı? (Real-time)
+  useEffect(() => {
+    if (!restaurant?.id) return;
+
+    const productsQuery = query(
+      collection(db, 'products'),
+      where('restaurantId', '==', restaurant.id),
+      orderBy('name', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(productsQuery, (snapshot) => {
+      const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      const activeAndAvailableProducts = products.filter(p => p.isAvailable);
+
+      console.log('🔍 Ürün kontrolü (Real-time):', {
+        restaurantId: restaurant.id,
+        totalProducts: products.length,
+        availableProducts: activeAndAvailableProducts.length,
+        products: products.map(p => ({ id: p.id, name: p.name, isAvailable: p.isAvailable }))
+      });
+      
+      // Detaylı ürün listesi
+      console.table(products.map(p => ({ 
+        'Ürün Adı': p.name, 
+        'Mevcut': p.isAvailable ? '✅' : '❌',
+        'ID': p.id.substring(0, 8) + '...'
+      })));
+
+      if (activeAndAvailableProducts.length === 0) {
+        // Ürün yoksa veya hepsi pasifse, tüm günleri kapat
+        const updatedHours = { ...restaurant.openingHours };
+        const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        
+        daysOfWeek.forEach(day => {
+          if (updatedHours[day]) {
+            updatedHours[day].isClosed = true;
+          }
+        });
+
+        updateRestaurant(restaurant.id, {
+          openingHours: updatedHours,
+          isOpen: false
+        }).catch(console.error);
+
+        setSystemClosedReason('Mevcut ürün bulunmadığından sistem tarafından kapatılmıştır');
+        toast.warning('Mevcut ürün bulunmadığından restoran sistem tarafından kapatılmıştır', {
+          duration: 10000
+        });
+      } else if (systemClosedReason) {
+        // Ürünler eklendiğinde sistem kapatma nedenini temizle
+        setSystemClosedReason('');
+      }
+    }, (error) => {
+      console.error('Ürün kontrolü hatası:', error);
+    });
+
+    return unsubscribe;
+  }, [restaurant?.id]);
 
   // Kalan süreyi gerçek zamanlı güncelle
   useEffect(() => {
@@ -170,25 +232,27 @@ export default function RestaurantSidebar() {
     });
   };
 
-  // Toggle switch'in durumu: Hem manuel kapanış hem de çalışma saatlerini kontrol et
+  // Toggle switch'in durumu
   const isToggleChecked = () => {
     if (!restaurant) return false;
-    // Eğer dönemsel kapatılmışsa, toggle kapalı olmalı
+    if (systemClosedReason) return false; // Sistem tarafından kapatıldıysa toggle kapalı
     if (isSeasonallyClosed()) return false;
-    // Eğer bugün manuel olarak kapatılmışsa, toggle kapalı olmalı
     if (isTodayManuallyClosed()) return false;
-    // Eğer çalışma saatlerine göre açıksa ve manuel kapanış yoksa, toggle açık olmalı
     return isTodayOpenBySchedule();
   };
 
   // Süreyi formatla
   const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
     const remainingSeconds = seconds % 60;
-    if (minutes > 0) {
-      return `${minutes} dk ${remainingSeconds} sn`;
+    
+    if (hours > 0) {
+      return `${hours}s ${minutes}dk ${remainingSeconds}sn`;
+    } else if (minutes > 0) {
+      return `${minutes}dk ${remainingSeconds}sn`;
     } else {
-      return `${remainingSeconds} sn`;
+      return `${remainingSeconds}sn`;
     }
   };
 
@@ -196,14 +260,13 @@ export default function RestaurantSidebar() {
   const getStatusText = () => {
     if (!restaurant) return 'Yükleniyor';
 
+    // Sistem tarafından kapatılmışsa
+    if (systemClosedReason) {
+      return systemClosedReason;
+    }
+
     if (remainingTime > 0) {
-      const minutes = Math.floor(remainingTime / 60);
-      const seconds = remainingTime % 60;
-      if (minutes > 0) {
-        return `${minutes} dk ${seconds} sn sonra açılır`;
-      } else {
-        return `${seconds} sn sonra açılır`;
-      }
+      return `${formatTime(remainingTime)} sonra açılır`;
     }
 
     if (isSeasonallyClosed()) {
@@ -221,7 +284,7 @@ export default function RestaurantSidebar() {
     return 'Çalışma saatleri dışında';
   };
 
-  // Component mount olduğunda localStorage'dan kalan süreyi yükle
+  // Component mount olduğunda veya restaurant değiştiğinde kalan süreyi yükle
   useEffect(() => {
     if (restaurant?.tempCloseEndTime) {
       const endTime = restaurant.tempCloseEndTime;
@@ -237,6 +300,8 @@ export default function RestaurantSidebar() {
           tempCloseOption: null
         }).catch(console.error);
       }
+    } else {
+      setRemainingTime(0);
     }
   }, [restaurant?.id, restaurant?.tempCloseEndTime]);
 
@@ -293,6 +358,14 @@ export default function RestaurantSidebar() {
   const handleToggleRestaurant = async (checked: boolean) => {
     if (!restaurant) {
       toast.error('Restoran bilgileri bulunamadı');
+      return;
+    }
+
+    // Sistem tarafından kapatıldıysa açma izni verme
+    if (systemClosedReason && checked) {
+      toast.error('Önce menüye mevcut ürün eklemeniz gerekiyor', {
+        duration: 5000
+      });
       return;
     }
 
@@ -361,13 +434,6 @@ export default function RestaurantSidebar() {
 
         setRemainingTime(totalSeconds);
 
-        // Otomatik açılma için timer ayarla
-        const timer = setTimeout(async () => {
-          await handleAutoOpenRestaurant();
-        }, totalSeconds * 1000);
-
-        setTemporaryCloseTimer(timer);
-
         toast.success(`${minutes} dakika sonra bugün otomatik açılacak`);
       } else if (selectedCloseOption === 'manual-close') {
         // Manuel kapat: sadece bugünü kapat
@@ -377,7 +443,9 @@ export default function RestaurantSidebar() {
         }
         
         await updateRestaurant(restaurant.id, { 
-          openingHours: updatedHours 
+          openingHours: updatedHours,
+          tempCloseEndTime: null,
+          tempCloseOption: null
         });
         
         toast.success('Bugün manuel olarak kapatıldı. Yarın çalışma saatlerinize göre otomatik açılacak.');
@@ -393,7 +461,9 @@ export default function RestaurantSidebar() {
         });
         
         await updateRestaurant(restaurant.id, { 
-          openingHours: updatedHours 
+          openingHours: updatedHours,
+          tempCloseEndTime: null,
+          tempCloseOption: null
         });
         
         toast.success('Dönemsel/tatil sebebiyle tüm günler kapatıldı. Açmak için manuel olarak açmanız gerekir.');
@@ -564,30 +634,50 @@ export default function RestaurantSidebar() {
       <div className="p-4 border-t border-gray-800">
         <div className={cn(
           "rounded-lg p-3",
+          systemClosedReason ? "bg-red-900/50 border border-red-700" :
           remainingTime > 0 ? "bg-orange-900/50 border border-orange-700" : "bg-gray-800"
         )}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-2">
               <div className={cn(
-                "w-2 h-2 rounded-full animate-pulse",
-                remainingTime > 0 ? "bg-orange-500" :
-                restaurant && isToggleChecked() ? "bg-green-500" : "bg-red-500"
+                "w-2 h-2 rounded-full",
+                systemClosedReason ? "bg-red-500 animate-pulse" :
+                remainingTime > 0 ? "bg-orange-500 animate-pulse" :
+                restaurant && isToggleChecked() ? "bg-green-500 animate-pulse" : "bg-red-500 animate-pulse"
               )}></div>
               <span className="text-sm font-medium">
-                {remainingTime > 0 ? 'Geçici Kapalı' :
+                {systemClosedReason ? 'Sistem Kapalı' :
+                 remainingTime > 0 ? 'Geçici Kapalı' :
                  restaurant ? (isToggleChecked() ? 'Hizmet Veriyor' : 'Kapalı') : 'Yükleniyor...'}
               </span>
             </div>
             <Switch
               checked={isToggleChecked()}
               onCheckedChange={handleToggleRestaurant}
-              disabled={!restaurant || remainingTime > 0}
+              disabled={!restaurant || remainingTime > 0 || !!systemClosedReason}
               className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
             />
           </div>
-          <p className="text-xs text-gray-400">
+          
+          {/* Durum açıklaması */}
+          <p className={cn(
+            "text-xs mb-2",
+            systemClosedReason ? "text-red-300" : "text-gray-400"
+          )}>
             {getStatusText()}
           </p>
+
+          {/* Sistem tarafından kapatılma uyarısı */}
+          {systemClosedReason && (
+            <div className="mt-2 flex items-start space-x-2 p-2 bg-red-800/30 rounded">
+              <AlertTriangle className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-red-300">
+                Restoranı açmak için menüye mevcut ürün eklemeniz gerekiyor.
+              </p>
+            </div>
+          )}
+
+          {/* Geri sayım göstergesi */}
           {remainingTime > 0 && (
             <div 
               className="mt-2 flex items-center space-x-2 cursor-pointer hover:bg-orange-800/30 p-1 rounded transition-colors"
@@ -595,13 +685,14 @@ export default function RestaurantSidebar() {
             >
               <Clock className="h-3 w-3 text-orange-400" />
               <span className="text-xs text-orange-300 font-medium">
-                Otomatik açılmaya: {formatTime(remainingTime)}
+                Otomatik açılma: {formatTime(remainingTime)}
               </span>
             </div>
           )}
         </div>
       </div>
 
+      {/* Kapatma Modal */}
       <Dialog open={isCloseModalOpen} onOpenChange={setIsCloseModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -616,22 +707,13 @@ export default function RestaurantSidebar() {
               <h4 className="font-medium text-sm text-gray-900">Kısa Süreli Kapama</h4>
               <RadioGroup value={selectedCloseOption} onValueChange={setSelectedCloseOption}>
                 <div className="grid grid-cols-2 gap-3">
-                  {/* 30 dakika ve altı */}
-                  {[5, 10, 15, 20, 25, 30].map((minutes) => (
+                  {[5, 10, 15, 20, 25, 30, 45, 60, 75, 90, 105, 120].map((minutes) => (
                     <div key={`temp-${minutes}`} className="flex items-center space-x-2">
                       <RadioGroupItem value={`temp-${minutes}`} id={`temp-${minutes}`} />
                       <Label htmlFor={`temp-${minutes}`} className="flex-1 cursor-pointer">
-                        <div className="font-medium">{minutes} dk</div>
-                        <div className="text-xs text-gray-500">Otomatik açılır</div>
-                      </Label>
-                    </div>
-                  ))}
-                  {/* 1-2 saat arası */}
-                  {[45, 60, 75, 90, 105, 120].map((minutes) => (
-                    <div key={`temp-${minutes}`} className="flex items-center space-x-2">
-                      <RadioGroupItem value={`temp-${minutes}`} id={`temp-${minutes}`} />
-                      <Label htmlFor={`temp-${minutes}`} className="flex-1 cursor-pointer">
-                        <div className="font-medium">{Math.floor(minutes / 60)}s {minutes % 60}dk</div>
+                        <div className="font-medium">
+                          {minutes < 60 ? `${minutes} dk` : `${Math.floor(minutes / 60)}s ${minutes % 60}dk`}
+                        </div>
                         <div className="text-xs text-gray-500">Otomatik açılır</div>
                       </Label>
                     </div>

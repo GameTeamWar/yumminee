@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { useState, useEffect, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
-import { Star, Clock, MapPin } from 'lucide-react';
+import { Star, Clock, MapPin, AlertCircle } from 'lucide-react';
 import { Restaurant } from '@/types';
 import { isRestaurantOpenBasedOnHours } from '@/lib/utils/restaurantHours';
 import { updateRestaurant } from '@/lib/firebase/db';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
+import type { Product } from '@/lib/firebase/db';
 import RestaurantCardClient from './RestaurantCardClient';
 
 interface RestaurantCardProps {
@@ -12,8 +15,44 @@ interface RestaurantCardProps {
 }
 
 const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
-  // Kampanya/promosyon varsa göster
   const hasPromotion = restaurant.rating >= 4.5;
+  const [hasActiveProducts, setHasActiveProducts] = useState(true);
+  
+  // Ürün kontrolü yap (Real-time)
+  useEffect(() => {
+    if (!restaurant?.id) return;
+
+    const productsQuery = query(
+      collection(db, 'products'),
+      where('restaurantId', '==', restaurant.id),
+      orderBy('name', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(productsQuery, (snapshot) => {
+      const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      const activeAndAvailableProducts = products.filter(p => p.isAvailable);
+      
+      console.log('🔍 RestaurantCard Ürün kontrolü (Real-time):', {
+        restaurantId: restaurant.id,
+        totalProducts: products.length,
+        availableProducts: activeAndAvailableProducts.length,
+        products: products.map(p => ({ id: p.id, name: p.name, isAvailable: p.isAvailable }))
+      });
+      
+      // Detaylı ürün listesi
+      console.table(products.map(p => ({ 
+        'Ürün Adı': p.name, 
+        'Mevcut': p.isAvailable ? '✅' : '❌',
+        'ID': p.id.substring(0, 8) + '...'
+      })));
+      
+      setHasActiveProducts(activeAndAvailableProducts.length > 0);
+    }, (error) => {
+      console.error('Ürün kontrolü hatası:', error);
+    });
+
+    return unsubscribe;
+  }, [restaurant?.id]);
   
   // Geçici kapanma süresini hesapla
   const remainingTime = useMemo(() => {
@@ -24,7 +63,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
     return remaining > 0 ? remaining : 0;
   }, [restaurant?.tempCloseEndTime]);
   
-  // Geri sayımı güncelle - süresi dolduğunda Firestore'dan temizle
+  // Geri sayımı güncelle
   useEffect(() => {
     if (remainingTime > 0) {
       const interval = setInterval(() => {
@@ -37,7 +76,6 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
         })();
         
         if (currentRemaining <= 1 && restaurant?.tempCloseEndTime) {
-          // Firestore'dan temizle
           updateRestaurant(restaurant.id, {
             tempCloseEndTime: null,
             tempCloseOption: null
@@ -51,6 +89,9 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
   
   // Restoranın açık olup olmadığını kontrol et
   const checkIfOpen = (): boolean => {
+    // Aktif ürün yoksa kapalı
+    if (!hasActiveProducts) return false;
+    
     // Geçici kapanma varsa kapalı
     if (remainingTime > 0) return false;
     
@@ -81,7 +122,12 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
 
   // Bir sonraki açılış zamanını hesapla
   const getNextOpeningInfo = (): string | null => {
-    // Geçici kapanma varsa seçilen seçeneği göster
+    // Ürün yoksa özel mesaj
+    if (!hasActiveProducts) {
+      return 'Menüde mevcut ürün bulunmuyor';
+    }
+
+    // Geçici kapanma varsa
     if (remainingTime > 0) {
       if (restaurant.tempCloseOption && restaurant.tempCloseOption.startsWith('temp-')) {
         const minutes = parseInt(restaurant.tempCloseOption.split('-')[1]);
@@ -96,7 +142,6 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
     const todayHours = restaurant.openingHours[today as keyof typeof restaurant.openingHours];
     
     if (todayHours?.isClosed) {
-      // Bugün manuel kapalı - yarın kontrol et
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowDay = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(tomorrow).toLowerCase();
@@ -108,7 +153,6 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
       return 'Kapalı';
     }
     
-    // Bugün çalışma saatleri dışında
     if (todayHours) {
       return `Bugün ${todayHours.open}'de açılır`;
     }
@@ -129,6 +173,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
 
   // Kapalı badge metnini belirle
   const getClosedBadgeText = (): string => {
+    if (!hasActiveProducts) return 'SİSTEM KAPALI';
     if (remainingTime > 0) return 'GEÇİCİ KAPALI';
     if (!restaurant.openingHours) return 'KAPALI';
     
@@ -136,7 +181,6 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
     const todayHours = restaurant.openingHours[today as keyof typeof restaurant.openingHours];
     
     if (todayHours?.isClosed) {
-      // Tüm günler kapalı mı kontrol et (dönemsel kapalı)
       const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
       const allDaysClosed = daysOfWeek.every(day => {
         const dayHours = restaurant.openingHours![day as keyof typeof restaurant.openingHours];
@@ -159,13 +203,8 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
           {/* Kapalı Badge */}
           {!isOpen && (
             <div className="absolute top-3 left-3 z-30">
-              <div className="bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg">
+              <div className={`px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg ${!hasActiveProducts ? 'bg-gray-800 text-white' : 'bg-red-600 text-white'}`}>
                 {getClosedBadgeText()}
-                {/*  {nextOpeningInfo && (
-                  <div className="text-xs opacity-90 mt-1">
-                    {nextOpeningInfo}
-                  </div>
-                )} */}
               </div>
             </div>
           )}
@@ -252,7 +291,7 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
                 <span className="font-medium">{typeof restaurant.deliveryTime === 'number' ? `${restaurant.deliveryTime}-${restaurant.deliveryTime + 10}` : restaurant.deliveryTime} dk</span>
               </div>
               
-              {/* Mesafe */}
+              {/* Çalışma Saatleri */}
               {restaurant.serviceRadius && (
                 <span className={`text-xs font-medium ${isOpen ? 'text-green-600' : 'text-red-600'}`}>
                   {restaurant.openingHours ? renderWorkingHours(restaurant.openingHours) : '08:00-22:00'}
@@ -268,14 +307,36 @@ const RestaurantCard = ({ restaurant }: RestaurantCardProps) => {
             )}
           </div>
 
+          {/* Sistem Kapalı Uyarısı */}
+          {!hasActiveProducts && (
+            <div className="mt-3 flex items-start space-x-2 p-2 bg-gray-100 rounded-lg border border-gray-300">
+              <AlertCircle className="h-4 w-4 text-gray-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-gray-700">
+                Menüde mevcut ürün bulunmadığından sistem tarafından kapatılmıştır
+              </p>
+            </div>
+          )}
+
           {/* Kapalı Butonu */}
-          {!isOpen && (
+          {!isOpen && hasActiveProducts && (
             <div className="mt-3">
               <button 
                 disabled 
                 className="w-full bg-gray-300 text-gray-600 px-4 py-2 rounded-lg font-semibold text-sm cursor-not-allowed"
               >
                 Kapalı
+              </button>
+            </div>
+          )}
+
+          {/* Sistem Kapalı Butonu */}
+          {!hasActiveProducts && (
+            <div className="mt-3">
+              <button 
+                disabled 
+                className="w-full bg-gray-800 text-white px-4 py-2 rounded-lg font-semibold text-sm cursor-not-allowed opacity-60"
+              >
+                Sistem Kapalı
               </button>
             </div>
           )}

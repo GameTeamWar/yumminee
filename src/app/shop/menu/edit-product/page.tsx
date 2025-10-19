@@ -111,7 +111,7 @@ export default function EditProductPage() {
         // Kategorileri yükle
         const categoriesQuery = query(
           collection(db, 'categories'),
-          where('restaurantId', '==', restaurantData.ownerId || restaurantData.id),
+          where('restaurantId', '==', restaurantData.id),
           where('isActive', '==', true)
         );
 
@@ -126,7 +126,7 @@ export default function EditProductPage() {
         // Opsiyonları yükle
         const optionsQuery = query(
           collection(db, 'options'),
-          where('restaurantId', '==', restaurantData.ownerId || restaurantData.id),
+          where('restaurantId', '==', restaurantData.id),
           where('isActive', '==', true)
         );
 
@@ -215,11 +215,11 @@ export default function EditProductPage() {
 
       // Get selected categories and options
       const selectedCategories = productData.categoryIds.map(id =>
-        categories.find(cat => (cat.customId || cat.id) === id)
+        categories.find(cat => cat.id === id)
       ).filter(Boolean);
 
       const selectedOptions = productData.optionIds.map(id =>
-        options.find(opt => (opt.customId || opt.id) === id)
+        options.find(opt => opt.id === id)
       ).filter(Boolean);
 
       // Prepare product data for Firebase
@@ -334,25 +334,24 @@ export default function EditProductPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Ürün Adı */}
-            <div>
-              <Label htmlFor="name">Ürün Adı *</Label>
-              <Input
-                id="name"
-                value={productData.name}
-                onChange={(e) => setProductData(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Ürün Adı Giriniz"
-                required
-                className="capitalize"
-              />
-            </div>
-
-            {/* Fiyatlar */}
-            <div className="space-y-4">
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <Label htmlFor="price">Satış Fiyatı *</Label>
+            {/* Ürün Adı ve Fiyat */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="name" className="mb-2">Ürün Adı *</Label>
+                <Input
+                  id="name"
+                  value={productData.name}
+                  onChange={(e) => setProductData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Ürün Adı Giriniz"
+                  required
+                  className="capitalize"
+                />
+              </div>
+              <div>
+                <Label htmlFor="price" className="mb-2">Satış Fiyatı *</Label>
+                <div className="flex items-center gap-4">
                   <Input
+                  className='w-41'
                     id="price"
                     type="number"
                     step="0.01"
@@ -370,28 +369,43 @@ export default function EditProductPage() {
                     placeholder="0.00"
                     required
                   />
-                  {originalProductPrice && parseFloat(productData.price || '0') < originalProductPrice && (
-                    <p className="text-sm text-gray-600 mt-1">
-                      Önceki fiyat: <span className="line-through text-red-500">{originalProductPrice.toFixed(2)} ₺</span>
-                    </p>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs bg-orange-500 text-white border-orange-500">
+                      Uygulamada görünen fiyatlardır.
+                    </Badge>
+                    {originalProductPrice && parseFloat(productData.price || '0') < originalProductPrice && (
+                      <Badge variant="destructive" className="text-xs text-white">
+                        İndirim uygulandı!
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs">
-                  Uygulamada görünen fiyatlardır.
-                </Badge>
                 {originalProductPrice && parseFloat(productData.price || '0') < originalProductPrice && (
-                  <Badge variant="destructive" className="text-xs text-white">
-                    İndirim uygulandı!
-                  </Badge>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Önceki fiyat: <span className="line-through text-red-500">{originalProductPrice.toFixed(2)} ₺</span>
+                  </p>
                 )}
               </div>
+              
+            </div>
+
+            {/* Hazırlama Süresi */}
+            <div>
+              <Label htmlFor="preparationTime" className="mb-2">Ürün Hazırlama Süresi (dakika)</Label>
+              <Input
+               className='w-52'  
+                id="preparationTime"
+                type="number"
+                min="0"
+                value={productData.preparationTime}
+                onChange={(e) => setProductData(prev => ({ ...prev, preparationTime: e.target.value }))}
+                placeholder="örn: 15"
+              />
             </div>
 
             {/* Ürün Görseli */}
             <div>
-              <Label>Ürün Görseli</Label>
+              <Label className="mb-2">Ürün Görseli</Label>
               <div className="flex gap-4 mt-2">
                 <div>
                   {productData.imageUrl ? (
@@ -445,7 +459,7 @@ export default function EditProductPage() {
 
             {/* Ürün Açıklaması */}
             <div>
-              <Label htmlFor="description">Ürün Açıklaması</Label>
+              <Label htmlFor="description" className="mb-2">Ürün Açıklaması</Label>
               <Textarea
                 id="description"
                 value={productData.description}
@@ -458,7 +472,7 @@ export default function EditProductPage() {
             {/* Kategoriler */}
             <div className="grid grid-cols-1 gap-4">
               <div>
-                <Label htmlFor="category">Ürünün Bulunduğu Kategori *</Label>
+                <Label htmlFor="category" className="mb-2">Ürünün Bulunduğu Kategori *</Label>
                 <div className="flex gap-2">
                   <Popover>
                     <PopoverTrigger asChild>
@@ -468,7 +482,7 @@ export default function EditProductPage() {
                       >
                         {(() => {
                           const validCategoryIds = productData.categoryIds.filter(id =>
-                            categories.some(cat => (cat.customId || cat.id) === id)
+                            categories.some(cat => cat.id === id)
                           );
                           return validCategoryIds.length > 0
                             ? `${validCategoryIds.length} kategori seçildi`
@@ -486,8 +500,8 @@ export default function EditProductPage() {
                             <div key={category.id} className="flex items-center space-x-2">
                               <Checkbox
                                 id={`category-${category.id}`}
-                                checked={productData.categoryIds.includes(category.customId || category.id)}
-                                onCheckedChange={() => handleCategoryToggle(category.customId || category.id)}
+                                checked={productData.categoryIds.includes(category.id)}
+                                onCheckedChange={() => handleCategoryToggle(category.id)}
                               />
                               <Label
                                 htmlFor={`category-${category.id}`}
@@ -518,7 +532,7 @@ export default function EditProductPage() {
 
               {/* Opsiyonlar */}
               <div>
-                <Label htmlFor="options">Ürün Opsiyonları</Label>
+                <Label htmlFor="options" className="mb-2">Ürün Opsiyonları</Label>
                 <div className="flex gap-2">
                   <Popover>
                     <PopoverTrigger asChild>
@@ -528,7 +542,7 @@ export default function EditProductPage() {
                       >
                         {(() => {
                           const validOptionIds = productData.optionIds.filter(id =>
-                            options.some(opt => (opt.customId || opt.id) === id)
+                            options.some(opt => opt.id === id)
                           );
                           return validOptionIds.length > 0
                             ? `${validOptionIds.length} opsiyon seçildi`
@@ -546,8 +560,8 @@ export default function EditProductPage() {
                             <div key={option.id} className="flex items-center space-x-2">
                               <Checkbox
                                 id={`option-${option.id}`}
-                                checked={productData.optionIds.includes(option.customId || option.id)}
-                                onCheckedChange={() => handleOptionToggle(option.customId || option.id)}
+                                checked={productData.optionIds.includes(option.id)}
+                                onCheckedChange={() => handleOptionToggle(option.id)}
                               />
                               <Label
                                 htmlFor={`option-${option.id}`}
@@ -593,7 +607,7 @@ export default function EditProductPage() {
             {/* Marka ve KDV */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="brand">Ürünün Markası</Label>
+                <Label htmlFor="brand" className="mb-2">Ürünün Markası</Label>
                 <Select value={productData.brand} onValueChange={(value) => setProductData(prev => ({ ...prev, brand: value }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seçiniz" />
@@ -677,7 +691,7 @@ export default function EditProductPage() {
               </div>
 
               <div>
-                <Label htmlFor="vatRate">KDV Oranı</Label>
+                <Label htmlFor="vatRate" className="mb-2">KDV Oranı</Label>
                 <Select value={productData.vatRate} onValueChange={(value) => setProductData(prev => ({ ...prev, vatRate: value }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seçiniz" />
