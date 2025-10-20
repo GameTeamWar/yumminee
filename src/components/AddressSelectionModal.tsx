@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -285,6 +285,9 @@ export const AddressSelectionModal = ({
               <MapPin className="w-5 h-5" />
               Teslimat Adresi Seçin
             </DialogTitle>
+            <DialogDescription>
+              Teslimat için kullanmak istediğiniz adresi seçin veya yeni adres ekleyin.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -446,6 +449,12 @@ export const AddressSelectionModal = ({
             <DialogTitle>
               {currentStep === 1 ? 'Konum Seçin' : 'Adres Bilgilerini Düzenleyin'}
             </DialogTitle>
+            <DialogDescription>
+              {currentStep === 1 
+                ? 'Haritadan teslimat adresinizi seçin. Konum seçildikten sonra adres bilgilerini düzenleyebilirsiniz.' 
+                : 'Seçtiğiniz konum için adres bilgilerini tamamlayın.'
+              }
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             {currentStep === 1 ? (
@@ -604,6 +613,9 @@ export const AddressSelectionModal = ({
               <Trash2 className="w-5 h-5 text-red-500" />
               Adresi Sil
             </DialogTitle>
+            <DialogDescription>
+              Bu adresi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <p className="text-gray-700 mb-4">

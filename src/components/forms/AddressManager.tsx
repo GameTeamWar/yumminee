@@ -22,6 +22,7 @@ import {
   DialogTitle,
   DialogFooter,
   DialogTrigger,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -395,15 +396,27 @@ export default function AddressManager({ userId }: AddressManagerProps) {
           setSelectedLocation(location);
           
           // Reverse geocoding ile adresi al ve input'a doldur
-          if (window.google && window.google.maps) {
+          if (window.google && window.google.maps && window.google.maps.Geocoder) {
             const geocoder = new google.maps.Geocoder();
             geocoder.geocode({ location: { lat: location.lat, lng: location.lng } }, (results, status) => {
               if (status === 'OK' && results && results[0]) {
                 const address = results[0].formatted_address;
                 setSearchQuery(address); // Input'a adresi doldur
                 setSelectedLocation({ ...location, address }); // Location'ı güncelle
+              } else {
+                // Geocoding başarısız olursa, koordinatları göster
+                const coordAddress = `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`;
+                setSearchQuery(coordAddress);
+                setSelectedLocation({ ...location, address: coordAddress });
+                console.warn('Reverse geocoding başarısız:', status);
               }
             });
+          } else {
+            // Google Maps yüklenmemişse koordinatları göster
+            const coordAddress = `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`;
+            setSearchQuery(coordAddress);
+            setSelectedLocation({ ...location, address: coordAddress });
+            console.warn('Google Maps API henüz yüklenmedi veya Geocoder mevcut değil');
           }
           
           toast.dismiss();
@@ -411,16 +424,22 @@ export default function AddressManager({ userId }: AddressManagerProps) {
         },
         (error) => {
           toast.dismiss();
-          console.error('Konum alınamadı:', error);
-          
+
+          // Better error logging with available details
+          const errorDetails = {
+            code: error.code,
+            message: error.message
+          };
+          console.error('Konum alınamadı:', errorDetails);
+
           if (error.code === error.PERMISSION_DENIED) {
             toast.error('Konum izni reddedildi. Lütfen tarayıcı ayarlarından konum iznini açın.');
           } else if (error.code === error.POSITION_UNAVAILABLE) {
-            toast.error('Konum bilgisi alınamıyor.');
+            toast.error('Konum bilgisi alınamıyor. Lütfen GPS\'inizi açın veya farklı bir konum deneyin.');
           } else if (error.code === error.TIMEOUT) {
-            toast.error('Konum alma zaman aşımına uğradı.');
+            toast.error('Konum alma zaman aşımına uğradı. Lütfen tekrar deneyin.');
           } else {
-            toast.error('Konum bilgisi alınamadı.');
+            toast.error('Konum bilgisi alınamadı. Lütfen manuel olarak adres girin.');
           }
         },
         {
@@ -513,10 +532,10 @@ export default function AddressManager({ userId }: AddressManagerProps) {
         <DialogContent className="sm:max-w-[700px] max-h-[90vh] p-0 overflow-hidden">
           <DialogHeader className="p-6 pb-3">
             <DialogTitle className="text-lg font-semibold">Teslimat Adresi Seç</DialogTitle>
-            <p className="text-sm text-gray-600 mt-2">
+            <DialogDescription className="text-sm text-gray-600 mt-2">
               Harita üzerinde bina girişini seçtiğinden emin ol. Bina girişini doğru seçmediğin 
               durumlarda siparişinin teslimatıyla ilgili sorun yaşayabilirsin.
-            </p>
+            </DialogDescription>
           </DialogHeader>
           
           <div className="px-6">
@@ -589,6 +608,9 @@ export default function AddressManager({ userId }: AddressManagerProps) {
             <DialogTitle>
               {selectedAddress ? 'Adresi Düzenle' : 'Adres Ekle'}
             </DialogTitle>
+            <DialogDescription>
+              Adres bilgilerini doldurun ve kaydedin.
+            </DialogDescription>
           </DialogHeader>
           
           {/* Harita Önizleme */}
@@ -656,13 +678,13 @@ export default function AddressManager({ userId }: AddressManagerProps) {
                   </div>
                   Teslimat Uyarısı
                 </DialogTitle>
-              </DialogHeader>
-              <div className="py-4">
-                <p className="text-sm text-gray-700">
+                <DialogDescription>
                   Teslimatınız haritada seçtiğiniz noktaya yapılacaktır. 
                   Aşağıdaki adres bilgileri (Bina No, Kat, Daire, vb.) sadece 
                   kuryemizin adresi daha kolay bulması içindir.
-                </p>
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
                 <p className="text-sm text-gray-600 mt-3">
                   Lütfen harita üzerinde tam olarak bina girişini işaretlediğinizden emin olun.
                 </p>
@@ -927,11 +949,10 @@ export default function AddressManager({ userId }: AddressManagerProps) {
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Adresi Sil</DialogTitle>
+            <DialogDescription>
+              Bu adresi silmek istediğinize emin misiniz?
+            </DialogDescription>
           </DialogHeader>
-          
-          <div className="py-4">
-            <p>Bu adresi silmek istediğinize emin misiniz?</p>
-          </div>
           
           <DialogFooter>
             <Button 

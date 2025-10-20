@@ -40,8 +40,8 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { getRestaurantByOwnerId, subscribeToRestaurantOrders, getUserProfileByCustomId, createUserProfile, getUserProfileByEmailAndRole, createRestaurant, createShopUser } from '@/lib/firebase/db';
-import { Order as DBOrder, Shop } from '@/types';
+import { getRestaurantByOwnerId, subscribeToRestaurantOrders, getUserProfileByCustomId, createUserProfile, getUserProfileByEmailAndRole, createRestaurant, createShopUser, getShop } from '@/lib/firebase/db';
+import { Order as DBOrder, Shop } from '@/lib/firebase/db';
 import { GeoPoint } from 'firebase/firestore';
 
 // Login ve Register için schema'lar
@@ -217,7 +217,7 @@ export default function ShopPage() {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const panelId = searchParams.get('panel');
@@ -236,6 +236,16 @@ export default function ShopPage() {
     defaultValues: {
       email: '',
       password: '',
+    },
+  });
+
+  // Forgot password için ayrı form
+  const forgotPasswordForm = useForm<{ email: string }>({
+    resolver: zodResolver(z.object({
+      email: z.string().email('Geçerli bir e-posta adresi giriniz'),
+    })),
+    defaultValues: {
+      email: '',
     },
   });
 
@@ -401,13 +411,32 @@ export default function ShopPage() {
 
     const loadRestaurantAndOrders = async () => {
       try {
-        // Restoranı getir
-        const restaurantData = await getRestaurantByOwnerId(user.uid);
-        if (!restaurantData) {
-          // Restoran bulunamadı, ayarlar sayfasına yönlendir
-          router.push('/shop/settings');
-          return;
+        let restaurantData: Shop | null = null;
+
+        // Eğer panelId varsa, o restoranın varlığını ve sahibi olup olmadığını kontrol et
+        if (panelId) {
+          const panelRestaurant = await getShop(panelId);
+          if (!panelRestaurant) {
+            toast.error('Restoran bulunamadı');
+            router.push('/shop');
+            return;
+          }
+          if (panelRestaurant.ownerId !== user.uid) {
+            toast.error('Bu restorana erişim yetkiniz yok');
+            router.push('/shop');
+            return;
+          }
+          restaurantData = panelRestaurant;
+        } else {
+          // Panel yoksa, user'ın restoranı getir
+          restaurantData = await getRestaurantByOwnerId(user.uid);
+          if (!restaurantData) {
+            // Restoran bulunamadı, ayarlar sayfasına yönlendir
+            router.push('/shop/settings');
+            return;
+          }
         }
+
         setRestaurant(restaurantData);
 
         // Siparişleri gerçek zamanlı dinle
@@ -471,7 +500,7 @@ export default function ShopPage() {
     };
 
     loadRestaurantAndOrders();
-  }, [user, router, isDashboard]);
+  }, [user, router, isDashboard, panelId]);
 
   const filteredOrders = orders
     .filter(order => selectedTab === 'all' || order.status === selectedTab)
@@ -1044,13 +1073,13 @@ export default function ShopPage() {
                       </p>
                     </div>
 
-                    <Form {...loginForm}>
-                      <form onSubmit={loginForm.handleSubmit(async (data) => {
+                    <Form {...forgotPasswordForm}>
+                      <form onSubmit={forgotPasswordForm.handleSubmit(async (data) => {
                         try {
                           setIsLoading(true);
                           await resetPassword(data.email);
                           toast.success('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi');
-                          loginForm.reset();
+                          forgotPasswordForm.reset();
                         } catch (error: any) {
                           console.error('Password reset error:', error);
                           toast.error('Şifre sıfırlama bağlantısı gönderilemedi: ' + (error.message || 'Bilinmeyen hata'));
@@ -1059,7 +1088,7 @@ export default function ShopPage() {
                         }
                       })} className="space-y-6">
                         <FormField
-                          control={loginForm.control}
+                          control={forgotPasswordForm.control}
                           name="email"
                           render={({ field }) => (
                             <FormItem>
@@ -1289,7 +1318,145 @@ export default function ShopPage() {
   }
 
   // Dashboard (panel parametresi varsa)
-  return (
+  if (isDashboard) {
+    // Eğer kullanıcı giriş yapmamışsa veya profil yükleniyorsa giriş formu göster
+    if (!user || !userProfile) {
+      return (
+        <div className="min-h-screen flex flex-col md:flex-row">
+          {/* Sol kısım - Görsel Alan */}
+          <div className="w-full md:w-3/5 bg-gray-100 relative overflow-hidden hidden md:block">
+            <div className="absolute inset-0 bg-orange-50 flex items-center justify-center">
+              <div className="max-w-md p-8">
+                <div className="relative mx-auto w-64 h-[500px]">
+                  {/* Animasyonlu yemek ikonları */}
+                  <div className="absolute -right-4 -bottom-10 w-40 h-40 bg-orange-300 rounded-full flex items-center justify-center animate-bounce">
+                    <span className="text-4xl">🍔</span>
+                  </div>
+                  <div className="absolute -left-16 top-10 w-32 h-32 bg-orange-200 rounded-full flex items-center justify-center animate-bounce" style={{animationDelay: "0.5s"}}>
+                    <span className="text-4xl">🍟</span>
+                  </div>
+                  <div className="absolute left-10 bottom-32 w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center animate-bounce" style={{animationDelay: "1s"}}>
+                    <span className="text-2xl">🍕</span>
+                  </div>
+                  
+                  <div className="relative mx-auto">
+                  {/*   <img 
+                      src="/images/customer-app-mockup.png" 
+                      alt="Müşteri Uygulaması" 
+                      className="w-full h-full object-contain z-10 relative"
+                    />*/}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Sağ kısım - Giriş Formu */}
+          <div className="w-full md:w-2/5 flex items-center justify-center p-8 bg-white">
+            <div className="w-full max-w-md">
+              <div className="text-center mb-8">
+                <div className="flex justify-center mb-4">
+                  <img src="/images/logo.png" alt="Yummine Logo" className="h-12" />
+                </div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Yummine Restoran Paneli
+                </h1>
+                <p className="text-sm text-gray-600 mt-2">
+                  Devam etmek için giriş yapmanız gerekiyor
+                </p>
+              </div>
+              
+              <div className="w-full">
+                <div className="mt-6">
+                  {/* Giriş Formu */}
+                  <Form {...loginForm}>
+                    <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-6">
+                      <FormField
+                        control={loginForm.control}
+                        name="email"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input 
+                                placeholder="E-Posta" 
+                                type="email" 
+                                autoComplete="email"
+                                disabled={isLoading}
+                                className="h-12"
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={loginForm.control}
+                        name="password"
+                        render={({ field }) => (
+                          <FormItem className="relative">
+                            <FormControl>
+                              <div className="relative">
+                                <Input 
+                                  placeholder="Şifre" 
+                                  type={showPassword ? "text" : "password"} 
+                                  autoComplete="current-password"
+                                  disabled={isLoading}
+                                  className="h-12 pr-10"
+                                  {...field} 
+                                />
+                                <button
+                                  type="button"
+                                  onClick={togglePasswordVisibility}
+                                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                                >
+                                  {showPassword ? (
+                                    <EyeOffIcon className="h-5 w-5" />
+                                  ) : (
+                                    <EyeIcon className="h-5 w-5" />
+                                  )}
+                                </button>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <Button 
+                        type="submit" 
+                        className="w-full h-12 bg-orange-600 hover:bg-orange-700" 
+                        disabled={isLoading}
+                      >
+                        {isLoading ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
+                      </Button>
+                    </form>
+                  </Form>
+                  <div className="mt-6 text-center space-y-2">
+                    <p className="text-sm text-gray-600">
+                      Hesabınız yok mu? <Link href="/shop?mode=register" className="text-orange-600 hover:underline font-medium">Kayıt olun</Link>
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <Link href="/shop?mode=forgot-password" className="text-orange-600 hover:underline font-medium">Şifremi unuttum</Link>
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-8 text-center">
+                <p className="text-sm text-gray-600">
+                  Hesabınızla ilgili sorun mu yaşıyorsunuz? Destek ekibimizle iletişime geçin.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Dashboard render
+    return (
     <div className="p-6 space-y-6 bg-gray-50">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -1470,4 +1637,5 @@ export default function ShopPage() {
       </div>
     </div>
   );
+  }
 }

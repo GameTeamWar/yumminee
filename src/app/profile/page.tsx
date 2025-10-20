@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { getUserProfile, getUserOrders, getFavoriteRestaurants, getRestaurant, subscribeToUserFavorites } from "@/lib/firebase/db";
+import { getUserProfile, getUserOrders, getFavoriteRestaurants, getRestaurant, subscribeToUserFavorites, createUserProfile } from "@/lib/firebase/db";
 import { UserProfile } from "@/lib/firebase/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/contexts/FavoriteContext";
@@ -38,7 +38,8 @@ import {
   Info,
   Crown,
   Gem,
-  Zap
+  Zap,
+  BarChart3
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -50,7 +51,7 @@ import {
 } from "@/components/ui/dialog";
 
 function ProfilePage() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, userProfile: authUserProfile, currentRole } = useAuth();
   const { favorites, loading: favoritesLoading } = useFavorites();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -128,7 +129,55 @@ function ProfilePage() {
       
       try {
         setIsLoading(true);
-        const profile = await getUserProfile(user.uid);
+        let profile = await getUserProfile(user.uid);
+        
+        // Eğer profil bulunamadıysa, varsayılan bir profil oluştur
+        if (!profile) {
+          console.warn("Kullanıcı profili bulunamadı, varsayılan profil oluşturuluyor...");
+          
+          // Kullanıcı bilgilerini kullanarak varsayılan profil oluştur
+          const defaultProfile = {
+            firstName: user.displayName?.split(' ')[0] || '',
+            lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
+            displayName: user.displayName || '',
+            email: user.email || '',
+            phoneNumber: '',
+            address: '',
+            dateOfBirth: '',
+            membershipLevel: 'bronze' as const,
+            loyaltyPoints: 0,
+            totalOrders: 0,
+            totalSpent: 0,
+            averageRating: 0,
+            isEmailVerified: user.emailVerified || false,
+            isPhoneVerified: false,
+            isActive: true,
+            preferences: {
+              notifications: {
+                orders: true,
+                promotions: true,
+                email: true,
+                sms: true
+              },
+              language: 'tr',
+              theme: 'light' as const
+            }
+          };
+          
+          // Firestore'a varsayılan profili kaydet
+          await createUserProfile(user.uid, defaultProfile);
+          
+          // Tekrar profil getir
+          profile = await getUserProfile(user.uid);
+          
+          if (!profile) {
+            toast.error("Profil oluşturulamadı. Lütfen tekrar giriş yapın.");
+            return;
+          }
+          
+          toast.success("Profiliniz başarıyla oluşturuldu!");
+        }
+        
         setUserProfile(profile as UserProfile);
         
         // Aktif sipariş sayısını hesapla
@@ -139,7 +188,7 @@ function ProfilePage() {
         setActiveOrdersCount(activeOrders.length);
         
         // Üye seviyesini hesapla
-        const calculatedLevel = calculateMembershipLevel((profile as UserProfile).totalOrders || 0, (profile as UserProfile).totalSpent || 0);
+        const calculatedLevel = calculateMembershipLevel(profile.totalOrders || 0, profile.totalSpent || 0);
         setUserProfile(prev => prev ? { ...prev, membershipLevel: calculatedLevel } : null);
         
       } catch (error) {
@@ -320,7 +369,34 @@ function ProfilePage() {
       icon: UserIcon,
       description: "Kişisel bilgilerinizi düzenleyin"
     },
-    ...(userProfile?.role !== 'restaurant' ? [
+    ...(userProfile?.role === 'shop' ? [
+      {
+        id: "restaurant-dashboard",
+        label: "Restoran Paneli",
+        icon: TrendingUp,
+        description: "Restoran istatistikleri ve analitikler",
+        badge: "Yeni"
+      },
+      {
+        id: "restaurant-orders",
+        label: "Sipariş Yönetimi",
+        icon: ClipboardList,
+        description: "Gelen siparişleri yönetin",
+        badge: activeOrdersCount > 0 ? activeOrdersCount.toString() : undefined
+      },
+      {
+        id: "restaurant-menu",
+        label: "Menü Yönetimi",
+        icon: Settings,
+        description: "Menü ve ürünleri düzenleyin"
+      },
+      {
+        id: "restaurant-analytics",
+        label: "Analitikler",
+        icon: BarChart3,
+        description: "Satış raporları ve istatistikler"
+      }
+    ] : [
       {
         id: "orders",
         label: "Siparişlerim",
@@ -346,7 +422,7 @@ function ProfilePage() {
         icon: CreditCard,
         description: "Kart bilgilerinizi yönetin"
       }
-    ] : []),
+    ]),
     {
       id: "notifications",
       label: "Bildirimler",
@@ -371,7 +447,7 @@ function ProfilePage() {
 
   const renderContent = () => {
     // Restoran sahipleri için izin verilmeyen bölümler
-    if (userProfile?.role === 'restaurant' && ['orders', 'addresses', 'favorites', 'payment'].includes(activeSection)) {
+    if (userProfile?.role === 'shop' && ['orders', 'addresses', 'favorites', 'payment'].includes(activeSection)) {
       return (
         <Card>
           <CardContent className="p-8 text-center">
@@ -392,17 +468,23 @@ function ProfilePage() {
         return (
           <div className="space-y-6">
             {/* Profil Özeti */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UserIcon className="h-5 w-5" />
+            <Card className="shadow-2xl border-0 bg-white/90 backdrop-blur-lg overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 opacity-50"></div>
+              <CardHeader className="relative pb-4">
+                <CardTitle className="flex items-center gap-3 text-xl">
+                  <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
+                    <UserIcon className="h-6 w-6 text-white" />
+                  </div>
                   Profil Bilgileri
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-8 relative">
                 {isLoading ? (
-                  <div className="flex justify-center py-8">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  <div className="flex justify-center py-12">
+                    <div className="relative">
+                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600"></div>
+                      <div className="absolute inset-0 rounded-full border-4 border-purple-200 border-t-purple-600 animate-spin animation-delay-300"></div>
+                    </div>
                   </div>
                 ) : (
                   <ProfileForm userProfile={userProfile} onUpdateSuccess={setUserProfile} />
@@ -411,44 +493,47 @@ function ProfilePage() {
             </Card>
 
             {/* İstatistikler */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <Package className="h-5 w-5 text-primary" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="group relative overflow-hidden bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-translate-y-1">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-400/20 to-purple-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <CardContent className="p-6 relative">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-white/20 rounded-2xl group-hover:bg-white/30 transition-colors duration-300">
+                      <Package className="h-8 w-8" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Toplam Sipariş</p>
-                      <p className="text-2xl font-bold">{userProfile?.totalOrders || 0}</p>
+                      <p className="text-blue-100 text-sm font-medium mb-1">Toplam Sipariş</p>
+                      <p className="text-3xl font-bold">{userProfile?.totalOrders || 0}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
               
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <TrendingUp className="h-5 w-5 text-green-600" />
+              <Card className="group relative overflow-hidden bg-gradient-to-br from-green-500 to-emerald-600 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-translate-y-1">
+                <div className="absolute inset-0 bg-gradient-to-br from-green-400/20 to-emerald-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <CardContent className="p-6 relative">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-white/20 rounded-2xl group-hover:bg-white/30 transition-colors duration-300">
+                      <TrendingUp className="h-8 w-8" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Toplam Harcama</p>
-                      <p className="text-2xl font-bold">₺{userProfile?.totalSpent?.toFixed(2) || '0.00'}</p>
+                      <p className="text-green-100 text-sm font-medium mb-1">Toplam Harcama</p>
+                      <p className="text-3xl font-bold">₺{userProfile?.totalSpent?.toFixed(2) || '0.00'}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-yellow-100 rounded-lg">
-                      <Star className="h-5 w-5 text-yellow-600" />
+              <Card className="group relative overflow-hidden bg-gradient-to-br from-yellow-500 to-orange-500 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-translate-y-1">
+                <div className="absolute inset-0 bg-gradient-to-br from-yellow-400/20 to-orange-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <CardContent className="p-6 relative">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-white/20 rounded-2xl group-hover:bg-white/30 transition-colors duration-300">
+                      <Star className="h-8 w-8" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Ortalama Puan</p>
-                      <p className="text-2xl font-bold">{userProfile?.averageRating?.toFixed(1) || '0.0'}</p>
+                      <p className="text-yellow-100 text-sm font-medium mb-1">Ortalama Puan</p>
+                      <p className="text-3xl font-bold">{userProfile?.averageRating?.toFixed(1) || '0.0'}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -680,19 +765,361 @@ function ProfilePage() {
           </Card>
         );
 
-      case "password":
+      case "restaurant-dashboard":
         return (
-          <Card>
+          <div className="space-y-6">
+            {/* Restoran Özeti */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-blue-100 text-sm font-medium">Bugünkü Siparişler</p>
+                      <p className="text-3xl font-bold">24</p>
+                    </div>
+                    <div className="p-3 bg-white/20 rounded-full">
+                      <Package className="h-8 w-8" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-r from-green-500 to-green-600 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-green-100 text-sm font-medium">Toplam Ciro</p>
+                      <p className="text-3xl font-bold">₺2,450</p>
+                    </div>
+                    <div className="p-3 bg-white/20 rounded-full">
+                      <TrendingUp className="h-8 w-8" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-purple-100 text-sm font-medium">Ortalama Puan</p>
+                      <p className="text-3xl font-bold">4.8</p>
+                    </div>
+                    <div className="p-3 bg-white/20 rounded-full">
+                      <Star className="h-8 w-8" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-orange-100 text-sm font-medium">Aktif Siparişler</p>
+                      <p className="text-3xl font-bold">3</p>
+                    </div>
+                    <div className="p-3 bg-white/20 rounded-full">
+                      <Zap className="h-8 w-8" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Son Siparişler */}
+            <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <ClipboardList className="h-6 w-6 text-blue-600" />
+                  Son Siparişler
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {[1, 2, 3].map((order) => (
+                    <div key={order} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:from-blue-50 hover:to-purple-50 transition-all duration-200">
+                      <div className="flex items-center gap-4">
+                        <div className="p-2 bg-blue-100 rounded-full">
+                          <Package className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-semibold">Sipariş #{1000 + order}</p>
+                          <p className="text-sm text-gray-600">2 öğe • ₺45.00</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          Hazırlanıyor
+                        </Badge>
+                        <Button size="sm" variant="outline" className="hover:bg-blue-50">
+                          Detaylar
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+      case "restaurant-orders":
+        return (
+          <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Lock className="h-5 w-5" />
-                Güvenlik Ayarları
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <ClipboardList className="h-6 w-6 text-blue-600" />
+                Sipariş Yönetimi
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <PasswordResetForm />
+              <div className="space-y-4">
+                <div className="flex gap-4 mb-6">
+                  <Button variant="default" className="bg-blue-600 hover:bg-blue-700">
+                    Tüm Siparişler
+                  </Button>
+                  <Button variant="outline">
+                    Bekleyen
+                  </Button>
+                  <Button variant="outline">
+                    Hazırlanıyor
+                  </Button>
+                  <Button variant="outline">
+                    Hazır
+                  </Button>
+                </div>
+
+                {[1, 2, 3, 4, 5].map((order) => (
+                  <div key={order} className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all duration-200 bg-gradient-to-r from-white to-gray-50">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-100 rounded-full">
+                          <Package className="h-6 w-6 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-lg">Sipariş #{1000 + order}</h3>
+                          <p className="text-gray-600">Ahmet Yılmaz • 15 dk önce</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-green-600">₺67.50</p>
+                        <p className="text-sm text-gray-500">3 öğe</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">Tavuk Döner:</span>
+                        <span>1 adet</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">Mercimek Çorbası:</span>
+                        <span>1 adet</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">Ayran:</span>
+                        <span>1 adet</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                          Beklemede
+                        </Badge>
+                        <span className="text-sm text-gray-500">Tahmini teslimat: 25 dk</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="hover:bg-red-50 hover:text-red-600">
+                          Reddet
+                        </Button>
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                          Kabul Et
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
+        );
+
+      case "restaurant-menu":
+        return (
+          <div className="space-y-6">
+            <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Settings className="h-6 w-6 text-blue-600" />
+                  Menü Yönetimi
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer border-2 border-dashed border-gray-300 hover:border-blue-400 bg-gradient-to-br from-blue-50 to-purple-50">
+                    <CardContent className="p-6 text-center">
+                      <div className="p-4 bg-blue-100 rounded-full w-fit mx-auto mb-4">
+                        <Package className="h-8 w-8 text-blue-600" />
+                      </div>
+                      <h3 className="font-semibold text-lg mb-2">Yeni Ürün Ekle</h3>
+                      <p className="text-gray-600 text-sm">Menünüze yeni bir ürün ekleyin</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer border-2 border-dashed border-gray-300 hover:border-green-400 bg-gradient-to-br from-green-50 to-emerald-50">
+                    <CardContent className="p-6 text-center">
+                      <div className="p-4 bg-green-100 rounded-full w-fit mx-auto mb-4">
+                        <Settings className="h-8 w-8 text-green-600" />
+                      </div>
+                      <h3 className="font-semibold text-lg mb-2">Kategorileri Düzenle</h3>
+                      <p className="text-gray-600 text-sm">Ürün kategorilerini yönetin</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer border-2 border-dashed border-gray-300 hover:border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50">
+                    <CardContent className="p-6 text-center">
+                      <div className="p-4 bg-purple-100 rounded-full w-fit mx-auto mb-4">
+                        <BarChart3 className="h-8 w-8 text-purple-600" />
+                      </div>
+                      <h3 className="font-semibold text-lg mb-2">Fiyat Güncelle</h3>
+                      <p className="text-gray-600 text-sm">Toplu fiyat güncellemesi yapın</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="mt-8">
+                  <h3 className="font-semibold text-lg mb-4">Mevcut Ürünler</h3>
+                  <div className="space-y-4">
+                    {[
+                      { name: "Tavuk Döner", price: "25.00", category: "Ana Yemekler", status: "Aktif" },
+                      { name: "Mercimek Çorbası", price: "12.00", category: "Çorbalar", status: "Aktif" },
+                      { name: "Ayran", price: "5.00", category: "İçecekler", status: "Aktif" }
+                    ].map((product, index) => (
+                      <div key={index} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:from-blue-50 hover:to-purple-50 transition-all duration-200">
+                        <div className="flex items-center gap-4">
+                          <div className="p-2 bg-white rounded-lg shadow-sm">
+                            <Package className="h-5 w-5 text-gray-600" />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold">{product.name}</h4>
+                            <p className="text-sm text-gray-600">{product.category}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="font-bold text-lg text-green-600">₺{product.price}</span>
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                            {product.status}
+                          </Badge>
+                          <Button size="sm" variant="outline">
+                            Düzenle
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+      case "restaurant-analytics":
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-blue-600" />
+                    Haftalık Satış Grafiği
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64 flex items-end justify-between gap-2">
+                    {['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((day, index) => {
+                      const height = [60, 80, 45, 90, 75, 85, 70][index];
+                      return (
+                        <div key={day} className="flex-1 flex flex-col items-center gap-2">
+                          <div 
+                            className="w-full bg-gradient-to-t from-blue-500 to-blue-600 rounded-t-lg transition-all duration-300 hover:from-blue-600 hover:to-blue-700"
+                            style={{ height: `${height}%` }}
+                          ></div>
+                          <span className="text-xs text-gray-600 font-medium">{day}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-green-600" />
+                    Popüler Ürünler
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {[
+                      { name: "Tavuk Döner", orders: 45, revenue: "1,125₺" },
+                      { name: "Mercimek Çorbası", orders: 32, revenue: "384₺" },
+                      { name: "Ayran", orders: 28, revenue: "140₺" },
+                      { name: "Kola", orders: 22, revenue: "110₺" }
+                    ].map((product, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <p className="font-semibold">{product.name}</p>
+                            <p className="text-sm text-gray-600">{product.orders} sipariş</p>
+                          </div>
+                        </div>
+                        <span className="font-bold text-green-600">{product.revenue}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Star className="h-5 w-5 text-yellow-500" />
+                  Müşteri Yorumları
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {[
+                    { customer: "Ahmet Y.", rating: 5, comment: "Yemekler çok lezzetli, servis hızlı!", date: "2 gün önce" },
+                    { customer: "Ayşe K.", rating: 4, comment: "Çok memnun kaldım, tekrar geleceğim.", date: "3 gün önce" },
+                    { customer: "Mehmet D.", rating: 5, comment: "Kesinlikle tavsiye ederim!", date: "5 gün önce" }
+                  ].map((review, index) => (
+                    <div key={index} className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl border border-yellow-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{review.customer}</span>
+                          <div className="flex">
+                            {[...Array(review.rating)].map((_, i) => (
+                              <Star key={i} className="h-4 w-4 text-yellow-500 fill-current" />
+                            ))}
+                          </div>
+                        </div>
+                        <span className="text-sm text-gray-500">{review.date}</span>
+                      </div>
+                      <p className="text-gray-700">{review.comment}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         );
 
       // case "settings":
@@ -734,57 +1161,81 @@ function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-white/80 backdrop-blur-lg border-b border-white/20 shadow-lg">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Avatar className="h-12 w-12">
-                <AvatarImage src={userProfile?.profilePicture || user.photoURL || ""} />
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  {user.displayName?.charAt(0) || user.email?.charAt(0) || "U"}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                <Avatar className="h-14 w-14 ring-4 ring-gradient-to-r from-blue-400 to-purple-400 shadow-xl">
+                  <AvatarImage src={userProfile?.profilePicture || user.photoURL || ""} />
+                  <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold text-lg">
+                    {user.displayName?.charAt(0) || user.email?.charAt(0) || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                {userProfile?.isEmailVerified && (
+                  <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-1">
+                    <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                )}
+              </div>
               <div>
-                <h1 className="text-xl font-bold">
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                   {user.displayName || "Kullanıcı"}
                 </h1>
-                <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
                   <Mail className="h-4 w-4" />
                   {user.email}
+                  {currentRole === 'restaurant' && (
+                    <>
+                      <span className="mx-2 text-gray-300">•</span>
+                      <span className="flex items-center gap-1 text-orange-600 font-medium bg-orange-50 px-3 py-1 rounded-full border border-orange-200">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        Restoran Sahibi
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
             
-            {/* Arama Kutusu */}
-            <div className="flex-1 max-w-md mx-8">
-              <form onSubmit={handleSearch} className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  type="text"
-                  placeholder="Restoran veya ürün ara..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full"
-                />
-              </form>
-            </div>
+            {/* Arama Kutusu - Sadece müşteri rolü için göster */}
+            {userProfile?.role !== 'shop' && (
+              <div className="flex-1 max-w-md mx-8">
+                <form onSubmit={handleSearch} className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <Input
+                    type="text"
+                    placeholder="Restoran veya ürün ara..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 pr-4 py-3 w-full rounded-xl border-2 border-gray-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 shadow-sm"
+                  />
+                </form>
+              </div>
+            )}
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Badge 
                 variant="secondary" 
-                className={`flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity ${
-                  userProfile?.membershipLevel === 'vip' ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' :
-                  userProfile?.membershipLevel === 'diamond' ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white' :
-                  userProfile?.membershipLevel === 'platinum' ? 'bg-gray-800 text-white' :
-                  userProfile?.membershipLevel === 'gold' ? 'bg-yellow-500 text-white' :
-                  userProfile?.membershipLevel === 'silver' ? 'bg-gray-400 text-white' :
-                  'bg-amber-600 text-white'
+                className={`flex items-center gap-2 cursor-pointer hover:opacity-90 transition-all duration-200 px-4 py-2 text-sm font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 ${
+                  userProfile?.membershipLevel === 'vip' ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 text-white border-0' :
+                  userProfile?.membershipLevel === 'diamond' ? 'bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-600 text-white border-0' :
+                  userProfile?.membershipLevel === 'platinum' ? 'bg-gradient-to-r from-gray-700 to-gray-900 text-white border-0' :
+                  userProfile?.membershipLevel === 'gold' ? 'bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500 text-white border-0' :
+                  userProfile?.membershipLevel === 'silver' ? 'bg-gradient-to-r from-gray-400 to-gray-600 text-white border-0' :
+                  'bg-gradient-to-r from-amber-600 to-orange-600 text-white border-0'
                 }`}
                 onClick={() => setShowMembershipModal(true)}
               >
-                <Award className="h-3 w-3" />
+                <Crown className="h-4 w-4" />
                 {userProfile?.membershipLevel === 'vip' ? 'VIP Üye' :
                  userProfile?.membershipLevel === 'diamond' ? 'Elmas Üye' :
                  userProfile?.membershipLevel === 'platinum' ? 'Platin Üye' :
@@ -792,15 +1243,26 @@ function ProfilePage() {
                  userProfile?.membershipLevel === 'silver' ? 'Gümüş Üye' :
                  'Bronz Üye'}
               </Badge>
-              <Badge variant="outline" className="flex items-center gap-1">
-                <Star className="h-3 w-3" />
-                {userProfile?.loyaltyPoints || 0} Puan
+              <Badge variant="outline" className="flex items-center gap-2 px-3 py-2 bg-white/50 backdrop-blur-sm border-2 border-gray-200 hover:border-blue-300 transition-all duration-200">
+                <Star className="h-4 w-4 text-yellow-500" />
+                <span className="font-semibold text-gray-700">{userProfile?.loyaltyPoints || 0}</span>
+                <span className="text-gray-600">Puan</span>
               </Badge>
-              <Button variant="outline" onClick={() => router.push('/restaurants')}>
-                <Home className="h-4 w-4 mr-2" />
-                Restoranlar
-              </Button>
-              <Button variant="outline" onClick={handleSignOut}>
+              {/* Restoranlar butonu - Sadece müşteri rolü için göster */}
+              {userProfile?.role !== 'shop' && (
+                <Button 
+                  onClick={() => router.push('/restaurants')} 
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+                >
+                  <Home className="h-4 w-4 mr-2" />
+                  Restoranlar
+                </Button>
+              )}
+              <Button 
+                variant="outline" 
+                onClick={handleSignOut}
+                className="border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 transition-all duration-200 shadow-sm hover:shadow-md"
+              >
                 <LogOut className="h-4 w-4 mr-2" />
                 Çıkış Yap
               </Button>
@@ -813,40 +1275,68 @@ function ProfilePage() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Sidebar */}
           <div className="lg:col-span-1">
-            <Card className="sticky top-8">
-              <CardContent className="p-4">
-                <nav className="space-y-2">
+            <Card className="sticky top-8 shadow-2xl border-0 bg-white/90 backdrop-blur-lg overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 opacity-50"></div>
+              <CardContent className="p-6 relative">
+                <nav className="space-y-3">
                   {menuItems.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => setActiveSection(item.id)}
-                      className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors text-left ${
+                      className={`w-full group relative overflow-hidden rounded-2xl p-4 transition-all duration-300 text-left transform hover:scale-105 ${
                         activeSection === item.id
-                          ? "bg-primary text-primary-foreground"
-                          : "hover:bg-gray-100"
+                          ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-xl"
+                          : "hover:bg-white/80 hover:shadow-lg border border-gray-200/50"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <item.icon className="h-5 w-5" />
-                        <div>
-                          <p className="font-medium">{item.label}</p>
-                          <p className={`text-xs ${
+                      <div className="flex items-center justify-between relative z-10">
+                        <div className="flex items-center gap-4">
+                          <div className={`p-2 rounded-xl transition-all duration-300 ${
                             activeSection === item.id 
-                              ? "text-primary-foreground/80" 
-                              : "text-gray-500"
+                              ? "bg-white/20" 
+                              : "bg-gradient-to-r from-blue-100 to-purple-100 group-hover:from-blue-200 group-hover:to-purple-200"
                           }`}>
-                            {item.description}
-                          </p>
+                            <item.icon className={`h-5 w-5 transition-colors duration-300 ${
+                              activeSection === item.id 
+                                ? "text-white" 
+                                : "text-blue-600 group-hover:text-purple-600"
+                            }`} />
+                          </div>
+                          <div>
+                            <p className={`font-semibold transition-colors duration-300 ${
+                              activeSection === item.id 
+                                ? "text-white" 
+                                : "text-gray-800 group-hover:text-blue-600"
+                            }`}>
+                              {item.label}
+                            </p>
+                            <p className={`text-xs transition-colors duration-300 ${
+                              activeSection === item.id 
+                                ? "text-blue-100" 
+                                : "text-gray-500 group-hover:text-purple-500"
+                            }`}>
+                              {item.description}
+                            </p>
+                          </div>
                         </div>
+                        {item.badge && (
+                          <Badge 
+                            variant={activeSection === item.id ? "secondary" : "default"}
+                            className={`text-xs font-semibold transition-all duration-300 ${
+                              activeSection === item.id 
+                                ? "bg-white/20 text-white border-white/30" 
+                                : "bg-gradient-to-r from-red-500 to-pink-500 text-white border-0 hover:from-red-600 hover:to-pink-600"
+                            }`}
+                          >
+                            {item.badge}
+                          </Badge>
+                        )}
                       </div>
-                      {item.badge && (
-                        <Badge 
-                          variant={activeSection === item.id ? "secondary" : "default"}
-                          className="text-xs"
-                        >
-                          {item.badge}
-                        </Badge>
-                      )}
+                      
+                      {/* Hover effect background */}
+                      <div className={`absolute inset-0 bg-gradient-to-r from-blue-400/10 to-purple-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl ${
+                        activeSection === item.id ? "opacity-0" : ""
+                      }`}></div>
                     </button>
                   ))}
                 </nav>
@@ -863,246 +1353,289 @@ function ProfilePage() {
 
       {/* Üyelik Sistemi Modal */}
       <Dialog open={showMembershipModal} onOpenChange={setShowMembershipModal}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-2xl">
-              <Crown className="h-6 w-6 text-yellow-500" />
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+          <DialogHeader className="text-center pb-6">
+            <div className="mx-auto w-16 h-16 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mb-4 shadow-lg">
+              <Crown className="h-8 w-8 text-white" />
+            </div>
+            <DialogTitle className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               Üyelik Sistemi
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-lg text-gray-600 mt-2">
               Sipariş sayınız ve harcamalarınız doğrultusunda üye seviyeniz otomatik olarak yükselir.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6">
+          <div className="space-y-8">
             {/* Mevcut Seviye */}
-            <div className="bg-gradient-to-r from-primary/10 to-secondary/10 p-4 rounded-lg">
-              <h3 className="font-semibold text-lg mb-2">Mevcut Üye Seviyeniz</h3>
-              <div className="flex items-center gap-3">
-                <Badge 
-                  className={`flex items-center gap-2 text-lg px-4 py-2 ${
-                    userProfile?.membershipLevel === 'vip' ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' :
-                    userProfile?.membershipLevel === 'diamond' ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white' :
-                    userProfile?.membershipLevel === 'platinum' ? 'bg-gray-800 text-white' :
-                    userProfile?.membershipLevel === 'gold' ? 'bg-yellow-500 text-white' :
-                    userProfile?.membershipLevel === 'silver' ? 'bg-gray-400 text-white' :
-                    'bg-amber-600 text-white'
-                  }`}
-                >
-                  <Award className="h-5 w-5" />
-                  {userProfile?.membershipLevel === 'vip' ? 'VIP Üye' :
-                   userProfile?.membershipLevel === 'diamond' ? 'Elmas Üye' :
-                   userProfile?.membershipLevel === 'platinum' ? 'Platin Üye' :
-                   userProfile?.membershipLevel === 'gold' ? 'Altın Üye' :
-                   userProfile?.membershipLevel === 'silver' ? 'Gümüş Üye' :
-                   'Bronz Üye'}
-                </Badge>
-                <div className="text-sm text-gray-600">
-                  {userProfile?.totalOrders || 0} sipariş • ₺{userProfile?.totalSpent?.toFixed(2) || '0.00'} harcama
+            <div className="bg-gradient-to-r from-white via-blue-50 to-purple-50 p-6 rounded-2xl shadow-xl border border-white/50 backdrop-blur-sm">
+              <h3 className="font-bold text-xl mb-4 text-center">Mevcut Üye Seviyeniz</h3>
+              <div className="flex items-center justify-center gap-4">
+                <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-lg transform hover:scale-105 transition-all duration-300 ${
+                  userProfile?.membershipLevel === 'vip' ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 text-white' :
+                  userProfile?.membershipLevel === 'diamond' ? 'bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-600 text-white' :
+                  userProfile?.membershipLevel === 'platinum' ? 'bg-gradient-to-r from-gray-700 to-gray-900 text-white' :
+                  userProfile?.membershipLevel === 'gold' ? 'bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500 text-white' :
+                  userProfile?.membershipLevel === 'silver' ? 'bg-gradient-to-r from-gray-400 to-gray-600 text-white' :
+                  'bg-gradient-to-r from-amber-600 to-orange-600 text-white'
+                }`}>
+                  <Award className="h-6 w-6" />
+                  <span className="text-xl font-bold">
+                    {userProfile?.membershipLevel === 'vip' ? 'VIP Üye' :
+                     userProfile?.membershipLevel === 'diamond' ? 'Elmas Üye' :
+                     userProfile?.membershipLevel === 'platinum' ? 'Platin Üye' :
+                     userProfile?.membershipLevel === 'gold' ? 'Altın Üye' :
+                     userProfile?.membershipLevel === 'silver' ? 'Gümüş Üye' :
+                     'Bronz Üye'}
+                  </span>
+                </div>
+                <div className="bg-white/80 backdrop-blur-sm px-4 py-3 rounded-xl shadow-md">
+                  <div className="text-sm text-gray-600 text-center">
+                    <div className="font-semibold text-lg text-blue-600">{userProfile?.totalOrders || 0}</div>
+                    <div>sipariş</div>
+                  </div>
+                  <div className="text-sm text-gray-600 text-center mt-2">
+                    <div className="font-semibold text-lg text-green-600">₺{userProfile?.totalSpent?.toFixed(2) || '0.00'}</div>
+                    <div>harcama</div>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Üye Seviyeleri Tablosu */}
-            <div className="space-y-4">
-              <h3 className="font-semibold text-lg">Üye Seviyeleri</h3>
+            <div className="space-y-6">
+              <h3 className="font-bold text-2xl text-center text-gray-800">Üye Seviyeleri</h3>
               
               <div className="grid gap-4">
                 {/* Bronz Üye */}
-                <div className={`p-4 rounded-lg border-2 transition-all ${
-                  userProfile?.membershipLevel === 'bronze' ? 'border-amber-500 bg-amber-50' : 'border-gray-200'
+                <div className={`group relative overflow-hidden p-6 rounded-2xl border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
+                  userProfile?.membershipLevel === 'bronze' 
+                    ? 'border-amber-500 bg-gradient-to-r from-amber-50 to-yellow-50 shadow-lg' 
+                    : 'border-gray-200 bg-white hover:border-amber-300'
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-amber-100 rounded-full">
-                        <Award className="h-5 w-5 text-amber-600" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/10 to-yellow-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-2xl transition-all duration-300 ${
+                        userProfile?.membershipLevel === 'bronze' 
+                          ? 'bg-amber-500 text-white shadow-lg' 
+                          : 'bg-amber-100 text-amber-600 group-hover:bg-amber-200'
+                      }`}>
+                        <Award className="h-6 w-6" />
                       </div>
                       <div>
-                        <h4 className="font-semibold">Bronz Üye</h4>
-                        <p className="text-sm text-gray-600">Yeni başlayan üyeler</p>
+                        <h4 className="font-bold text-lg text-gray-800">Bronz Üye</h4>
+                        <p className="text-gray-600">Yeni başlayan üyeler</p>
                       </div>
                     </div>
-                    <div className="text-right text-sm">
-                      <p>0-49 sipariş</p>
-                      <p>₺0-999 harcama</p>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-gray-600">0-49 sipariş</div>
+                      <div className="text-sm font-semibold text-gray-600">₺0-999 harcama</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Gümüş Üye */}
-                <div className={`p-4 rounded-lg border-2 transition-all ${
-                  userProfile?.membershipLevel === 'silver' ? 'border-gray-400 bg-gray-50' : 'border-gray-200'
+                <div className={`group relative overflow-hidden p-6 rounded-2xl border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
+                  userProfile?.membershipLevel === 'silver' 
+                    ? 'border-gray-400 bg-gradient-to-r from-gray-50 to-slate-50 shadow-lg' 
+                    : 'border-gray-200 bg-white hover:border-gray-400'
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-gray-100 rounded-full">
-                        <Award className="h-5 w-5 text-gray-500" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-gray-400/10 to-slate-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-2xl transition-all duration-300 ${
+                        userProfile?.membershipLevel === 'silver' 
+                          ? 'bg-gray-500 text-white shadow-lg' 
+                          : 'bg-gray-100 text-gray-600 group-hover:bg-gray-200'
+                      }`}>
+                        <Award className="h-6 w-6" />
                       </div>
                       <div>
-                        <h4 className="font-semibold">Gümüş Üye</h4>
-                        <p className="text-sm text-gray-600">Düzenli müşteriler</p>
+                        <h4 className="font-bold text-lg text-gray-800">Gümüş Üye</h4>
+                        <p className="text-gray-600">Düzenli müşteriler</p>
                       </div>
                     </div>
-                    <div className="text-right text-sm">
-                      <p>50-99 sipariş</p>
-                      <p>₺1.000-2.499 harcama</p>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-gray-600">50-99 sipariş</div>
+                      <div className="text-sm font-semibold text-gray-600">₺1.000-2.499 harcama</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Altın Üye */}
-                <div className={`p-4 rounded-lg border-2 transition-all ${
-                  userProfile?.membershipLevel === 'gold' ? 'border-yellow-500 bg-yellow-50' : 'border-gray-200'
+                <div className={`group relative overflow-hidden p-6 rounded-2xl border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
+                  userProfile?.membershipLevel === 'gold' 
+                    ? 'border-yellow-500 bg-gradient-to-r from-yellow-50 to-amber-50 shadow-lg' 
+                    : 'border-gray-200 bg-white hover:border-yellow-400'
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-yellow-100 rounded-full">
-                        <Award className="h-5 w-5 text-yellow-600" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/10 to-amber-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-2xl transition-all duration-300 ${
+                        userProfile?.membershipLevel === 'gold' 
+                          ? 'bg-yellow-500 text-white shadow-lg' 
+                          : 'bg-yellow-100 text-yellow-600 group-hover:bg-yellow-200'
+                      }`}>
+                        <Award className="h-6 w-6" />
                       </div>
                       <div>
-                        <h4 className="font-semibold">Altın Üye</h4>
-                        <p className="text-sm text-gray-600">Sadık müşteriler</p>
+                        <h4 className="font-bold text-lg text-gray-800">Altın Üye</h4>
+                        <p className="text-gray-600">Sadık müşteriler</p>
                       </div>
                     </div>
-                    <div className="text-right text-sm">
-                      <p>100-199 sipariş</p>
-                      <p>₺2.500-4.999 harcama</p>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-gray-600">100-199 sipariş</div>
+                      <div className="text-sm font-semibold text-gray-600">₺2.500-4.999 harcama</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Platin Üye */}
-                <div className={`p-4 rounded-lg border-2 transition-all ${
-                  userProfile?.membershipLevel === 'platinum' ? 'border-gray-800 bg-gray-50' : 'border-gray-200'
+                <div className={`group relative overflow-hidden p-6 rounded-2xl border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
+                  userProfile?.membershipLevel === 'platinum' 
+                    ? 'border-gray-800 bg-gradient-to-r from-gray-50 to-slate-100 shadow-lg' 
+                    : 'border-gray-200 bg-white hover:border-gray-600'
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-gray-100 rounded-full">
-                        <Gem className="h-5 w-5 text-gray-700" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-gray-600/10 to-slate-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-2xl transition-all duration-300 ${
+                        userProfile?.membershipLevel === 'platinum' 
+                          ? 'bg-gray-800 text-white shadow-lg' 
+                          : 'bg-gray-100 text-gray-700 group-hover:bg-gray-200'
+                      }`}>
+                        <Gem className="h-6 w-6" />
                       </div>
                       <div>
-                        <h4 className="font-semibold">Platin Üye</h4>
-                        <p className="text-sm text-gray-600">Premium üyeler</p>
+                        <h4 className="font-bold text-lg text-gray-800">Platin Üye</h4>
+                        <p className="text-gray-600">Premium üyeler</p>
                       </div>
                     </div>
-                    <div className="text-right text-sm">
-                      <p>200-349 sipariş</p>
-                      <p>₺5.000-9.999 harcama</p>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-gray-600">200-349 sipariş</div>
+                      <div className="text-sm font-semibold text-gray-600">₺5.000-9.999 harcama</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Elmas Üye */}
-                <div className={`p-4 rounded-lg border-2 transition-all ${
-                  userProfile?.membershipLevel === 'diamond' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                <div className={`group relative overflow-hidden p-6 rounded-2xl border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
+                  userProfile?.membershipLevel === 'diamond' 
+                    ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-cyan-50 shadow-lg' 
+                    : 'border-gray-200 bg-white hover:border-blue-400'
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 rounded-full">
-                        <Gem className="h-5 w-5 text-blue-600" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400/10 to-cyan-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-2xl transition-all duration-300 ${
+                        userProfile?.membershipLevel === 'diamond' 
+                          ? 'bg-blue-500 text-white shadow-lg' 
+                          : 'bg-blue-100 text-blue-600 group-hover:bg-blue-200'
+                      }`}>
+                        <Gem className="h-6 w-6" />
                       </div>
                       <div>
-                        <h4 className="font-semibold">Elmas Üye</h4>
-                        <p className="text-sm text-gray-600">VIP müşteriler</p>
+                        <h4 className="font-bold text-lg text-gray-800">Elmas Üye</h4>
+                        <p className="text-gray-600">VIP müşteriler</p>
                       </div>
                     </div>
-                    <div className="text-right text-sm">
-                      <p>350-499 sipariş</p>
-                      <p>₺10.000-19.999 harcama</p>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-gray-600">350-499 sipariş</div>
+                      <div className="text-sm font-semibold text-gray-600">₺10.000-19.999 harcama</div>
                     </div>
                   </div>
                 </div>
 
                 {/* VIP Üye */}
-                <div className={`p-4 rounded-lg border-2 transition-all ${
-                  userProfile?.membershipLevel === 'vip' ? 'border-purple-500 bg-purple-50' : 'border-gray-200'
+                <div className={`group relative overflow-hidden p-6 rounded-2xl border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
+                  userProfile?.membershipLevel === 'vip' 
+                    ? 'border-purple-500 bg-gradient-to-r from-purple-50 via-pink-50 to-red-50 shadow-lg' 
+                    : 'border-gray-200 bg-white hover:border-purple-400'
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-100 rounded-full">
-                        <Crown className="h-5 w-5 text-purple-600" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-400/10 via-pink-400/10 to-red-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-2xl transition-all duration-300 ${
+                        userProfile?.membershipLevel === 'vip' 
+                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
+                          : 'bg-purple-100 text-purple-600 group-hover:bg-purple-200'
+                      }`}>
+                        <Crown className="h-6 w-6" />
                       </div>
                       <div>
-                        <h4 className="font-semibold">VIP Üye</h4>
-                        <p className="text-sm text-gray-600">En değerli müşteriler</p>
+                        <h4 className="font-bold text-lg text-gray-800">VIP Üye</h4>
+                        <p className="text-gray-600">En değerli müşteriler</p>
                       </div>
                     </div>
-                    <div className="text-right text-sm">
-                      <p>500+ sipariş</p>
-                      <p>₺20.000+ harcama</p>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-gray-600">500+ sipariş</div>
+                      <div className="text-sm font-semibold text-gray-600">₺20.000+ harcama</div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Avantajlar */}
-            {/*
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-                <Zap className="h-5 w-5 text-blue-600" />
-                Üye Avantajları
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-yellow-500" />
-                  <span>Özel indirimler ve kampanyalar</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-yellow-500" />
-                  <span>Öncelikli müşteri desteği</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-yellow-500" />
-                  <span>Hızlı teslimat garantisi</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-yellow-500" />
-                  <span>Doğum günü sürprizleri</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-yellow-500" />
-                  <span>Ücretsiz teslimat fırsatları</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-yellow-500" />
-                  <span>Özel menü önerileri</span>
-                </div>
-              </div>
-            </div>
-            */}
-
             {/* İlerleme Durumu */}
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-lg mb-3">Sonraki Seviye</h3>
+            <div className="bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 p-6 rounded-2xl shadow-xl border border-green-200/50">
+              <h3 className="font-bold text-xl mb-4 text-center text-gray-800">Sonraki Seviye</h3>
               {userProfile?.membershipLevel === 'vip' ? (
-                <p className="text-green-700 font-medium">🎉 En yüksek seviyeye ulaştınız!</p>
+                <div className="text-center py-8">
+                  <div className="text-6xl mb-4">🎉</div>
+                  <p className="text-green-700 font-bold text-xl">En yüksek seviyeye ulaştınız!</p>
+                  <p className="text-gray-600 mt-2">Tebrikler, VIP üyesiniz!</p>
+                </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Sipariş ilerlemesi</span>
-                    <span>{userProfile?.totalOrders || 0}/{
-                      userProfile?.membershipLevel === 'bronze' ? '50' :
-                      userProfile?.membershipLevel === 'silver' ? '100' :
-                      userProfile?.membershipLevel === 'gold' ? '200' :
-                      userProfile?.membershipLevel === 'platinum' ? '350' :
-                      '500'
-                    }</span>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center text-sm font-semibold">
+                    <span className="text-gray-700">Sipariş ilerlemesi</span>
+                    <span className="text-blue-600 bg-blue-100 px-3 py-1 rounded-full">
+                      {userProfile?.totalOrders || 0}/{
+                        userProfile?.membershipLevel === 'bronze' ? '50' :
+                        userProfile?.membershipLevel === 'silver' ? '100' :
+                        userProfile?.membershipLevel === 'gold' ? '200' :
+                        userProfile?.membershipLevel === 'platinum' ? '350' :
+                        '500'
+                      }
+                    </span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-green-600 h-2 rounded-full transition-all duration-500"
-                      style={{
-                        width: `${Math.min(100, ((userProfile?.totalOrders || 0) / (
+                  <div className="relative">
+                    <div className="w-full bg-gray-200 rounded-full h-4 shadow-inner">
+                      <div 
+                        className="bg-gradient-to-r from-green-500 to-emerald-500 h-4 rounded-full transition-all duration-1000 shadow-lg"
+                        style={{
+                          width: `${Math.min(100, ((userProfile?.totalOrders || 0) / (
+                            userProfile?.membershipLevel === 'bronze' ? 50 :
+                            userProfile?.membershipLevel === 'silver' ? 100 :
+                            userProfile?.membershipLevel === 'gold' ? 200 :
+                            userProfile?.membershipLevel === 'platinum' ? 350 :
+                            500
+                          )) * 100)}%`
+                        }}
+                      ></div>
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-white font-bold text-sm drop-shadow-lg">
+                        %{Math.round((userProfile?.totalOrders || 0) / (
                           userProfile?.membershipLevel === 'bronze' ? 50 :
                           userProfile?.membershipLevel === 'silver' ? 100 :
                           userProfile?.membershipLevel === 'gold' ? 200 :
                           userProfile?.membershipLevel === 'platinum' ? 350 :
                           500
-                        )) * 100)}%`
-                      }}
-                    ></div>
+                        ) * 100)}
+                      </span>
+                    </div>
                   </div>
+                  <p className="text-center text-gray-600 text-sm">
+                    Sonraki seviye için {(
+                      (userProfile?.membershipLevel === 'bronze' ? 50 :
+                       userProfile?.membershipLevel === 'silver' ? 100 :
+                       userProfile?.membershipLevel === 'gold' ? 200 :
+                       userProfile?.membershipLevel === 'platinum' ? 350 :
+                       500) - (userProfile?.totalOrders || 0)
+                    )} sipariş daha gerekiyor.
+                  </p>
                 </div>
               )}
             </div>

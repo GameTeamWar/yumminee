@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
   Star,
   Clock,
@@ -38,6 +38,19 @@ import { useCart } from '@/contexts/CartContext';
 const Header = dynamic(() => import('@/components/Header'), {
   ssr: false
 });
+
+// Ödeme yöntemlerini Türkçe'ye çeviren fonksiyon
+const translatePaymentMethod = (method: string): string => {
+  const translations: Record<string, string> = {
+    'cash': 'Nakit',
+    'credit_card': 'Kredi Kartı',
+    'debit_card': 'Banka Kartı',
+    'online': 'Online Ödeme',
+    'card': 'Kart',
+    'cash_on_delivery': 'Kapıda Ödeme'
+  };
+  return translations[method] || method;
+};
 
 export default function RestaurantDetailPage() {
   const params = useParams();
@@ -102,7 +115,8 @@ export default function RestaurantDetailPage() {
           id: normalizedRestaurant.id,
           name: normalizedRestaurant.name,
           isOpen: normalizedRestaurant.isOpen,
-          openingHours: normalizedRestaurant.openingHours
+          openingHours: normalizedRestaurant.openingHours,
+          paymentMethods: normalizedRestaurant.paymentMethods
         });
 
         // Menü bilgilerini al - gerçek zamanlı
@@ -162,6 +176,11 @@ export default function RestaurantDetailPage() {
     const unsubscribeRestaurant = onSnapshot(restaurantRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const data = docSnapshot.data();
+        console.log('Restoran gerçek zamanlı güncellendi:', {
+          id: docSnapshot.id,
+          paymentMethods: data.paymentMethods,
+          allData: data
+        });
         setRestaurant({ id: docSnapshot.id, ...data } as Shop);
       }
     }, (error) => {
@@ -575,13 +594,13 @@ export default function RestaurantDetailPage() {
   </div>
 
   {/* Ödeme Yöntemleri (Her zaman aşağıda) */}
-  {restaurant.paymentMethods && restaurant.paymentMethods.length > 0 && (
+  {restaurant.paymentMethods && restaurant.paymentMethods.length > 0 && isOpen && (
     <div className="flex flex-col gap-1 md:col-span-3 mt-2 border-t border-gray-100 pt-2">
       <span className="text-sm text-white md:text-gray-600">Ödeme</span>
       <div className="flex items-center gap-2">
         <CreditCard className="h-4 w-4 text-white md:text-gray-500" />
         <span className="font-medium text-white md:text-gray-900">
-          {restaurant.paymentMethods.join(', ')}
+          {restaurant.paymentMethods.map(method => translatePaymentMethod(method)).join(', ')}
         </span>
       </div>
     </div>
@@ -850,6 +869,9 @@ export default function RestaurantDetailPage() {
               <Clock className="h-5 w-5" />
               Çalışma Saatleri
             </DialogTitle>
+            <DialogDescription>
+              Restoranın haftalık çalışma saatleri ve güncel durumu.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {restaurant?.openingHours ? (

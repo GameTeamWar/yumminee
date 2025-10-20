@@ -27,11 +27,28 @@ function ClientLayout({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const panelId = searchParams.get('panel');
+  const mode = searchParams.get('mode');
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [authCheckLoading, setAuthCheckLoading] = useState(true);
 
-  // Authorization kontrolü
+  // Auth modları için yetkilendirme kontrolü yapma
+  const isAuthMode = mode === 'login' || mode === 'register' || mode === 'forgot-password';
+  const isDashboard = !!panelId;
+
+  // Authorization kontrolü - sadece dashboard için
   useEffect(() => {
+    if (isAuthMode) {
+      setIsAuthorized(null); // Auth modlarında yetkilendirme kontrolü yok
+      setAuthCheckLoading(false);
+      return;
+    }
+
+    if (!isDashboard) {
+      setIsAuthorized(null); // Tanıtım sayfası için yetkilendirme kontrolü yok
+      setAuthCheckLoading(false);
+      return;
+    }
+
     const checkAuthorization = async () => {
       if (loading) return;
 
@@ -61,6 +78,13 @@ function ClientLayout({ children }: { children: React.ReactNode }) {
         const restaurant = await getRestaurantByOwnerId(user.uid);
         if (restaurant && restaurant.id === panelId) {
           setIsAuthorized(true);
+        } else if (restaurant && panelId !== restaurant.id) {
+          // Farklı restaurant ID'si ile erişim deneniyor
+          setIsAuthorized(false);
+        } else if (!restaurant && userProfile?.role === 'shop') {
+          // Restaurant sahibi ama restaurant oluşturmamış - restaurant oluşturma sayfasına yönlendir
+          router.replace('/shop/register');
+          setIsAuthorized(null);
         } else {
           setIsAuthorized(false);
         }
@@ -73,10 +97,10 @@ function ClientLayout({ children }: { children: React.ReactNode }) {
     };
 
     checkAuthorization();
-  }, [user, loading, userProfile, panelId]);
+  }, [user, loading, userProfile, panelId, mode, isAuthMode, isDashboard]);
 
-  // Auth durumları yüklenene kadar bekle
-  if (loading || authCheckLoading) {
+  // Auth durumları yüklenene kadar bekle - sadece dashboard için
+  if (!isAuthMode && !isDashboard && loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -87,8 +111,47 @@ function ClientLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Yetkisiz erişim - hiçbir şey gösterme, sadece hata mesajı
-  if (isAuthorized === false) {
+  // Dashboard için auth kontrolü
+  if (isDashboard && authCheckLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Giriş yapmış shop kullanıcısı auth modundaysa dashboard'a yönlendir
+  if (isAuthMode && !loading && user && userProfile?.role === 'shop') {
+    // Kullanıcının restaurant'ını bul ve dashboard'a yönlendir
+    const redirectToDashboard = async () => {
+      try {
+        const restaurant = await getRestaurantByOwnerId(user.uid);
+        if (restaurant) {
+          router.replace(`/shop?panel=${restaurant.id}`);
+        } else {
+          router.replace('/shop');
+        }
+      } catch (error) {
+        console.error('Restaurant bilgisi alınamadı:', error);
+        router.replace('/shop');
+      }
+    };
+    redirectToDashboard();
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Yönlendiriliyorsunuz...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Yetkisiz erişim - sadece dashboard için
+  if (isDashboard && isAuthorized === false) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-8">
@@ -121,6 +184,18 @@ function ClientLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Auth modları ve tanıtım sayfası için normal header
+  if (isAuthMode || !isDashboard) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="flex-1">
+          {children}
+        </main>
+      </div>
+    );
+  }
+
   // Yetkili erişim - Dashboard göster
   if (isAuthorized === true) {
     return (
@@ -136,7 +211,7 @@ function ClientLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Fallback - public mod
+  // Fallback
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />

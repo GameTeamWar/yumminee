@@ -14,20 +14,32 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Bell, Settings, LogOut, User, Wallet, TrendingUp, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function RestaurantHeader() {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const [balance] = useState(12450.50); // Mock balance - gerçekte API'den gelecek
   const [todayEarnings] = useState(850.00); // Bugünkü kazanç
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  // Çıkış sonrası yönlendirme için user state'ini dinle
+  useEffect(() => {
+    if (isSigningOut && !user) {
+      // Çıkış işlemi tamamlandı, login sayfasına yönlendir
+      router.push('/shop?mode=login');
+      setIsSigningOut(false);
+    }
+  }, [user, isSigningOut, router]);
 
   const handleSignOut = async () => {
     try {
+      setIsSigningOut(true);
       await signOut();
-      router.push('/shop?mode=login');
+      // Yönlendirme useEffect'te yapılacak
     } catch (error) {
       console.error('Çıkış hatası:', error);
+      setIsSigningOut(false);
     }
   };
 

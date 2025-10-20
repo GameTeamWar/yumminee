@@ -20,7 +20,7 @@ const containerStyle = {
   height: '100%'
 };
 
-const libraries: ("places" | "geometry")[] = ["places", "geometry"];
+const libraries: ("places")[] = ["places"];
 
 const LocationPickerMap = ({ onLocationSelect, searchQuery, searchTrigger, currentLocation }: LocationPickerMapProps) => {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
@@ -55,7 +55,7 @@ const LocationPickerMap = ({ onLocationSelect, searchQuery, searchTrigger, curre
 
   // CurrentLocation değiştiğinde haritayı güncelle ve reverse geocoding yap
   useEffect(() => {
-    if (currentLocation && map) {
+    if (currentLocation && map && window.google && window.google.maps && window.google.maps.Geocoder) {
       const position = { lat: currentLocation.lat, lng: currentLocation.lng };
       setMarkerPosition(position);
       setCenter(position);
@@ -72,6 +72,15 @@ const LocationPickerMap = ({ onLocationSelect, searchQuery, searchTrigger, curre
               lng: currentLocation.lng,
               address: results[0].formatted_address
             });
+          } else {
+            console.warn('Reverse geocoding başarısız:', status);
+            // Geocoding başarısız olursa koordinatları göster
+            const coordAddress = `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}`;
+            onLocationSelect({
+              lat: currentLocation.lat,
+              lng: currentLocation.lng,
+              address: coordAddress
+            });
           }
         });
       }
@@ -80,11 +89,11 @@ const LocationPickerMap = ({ onLocationSelect, searchQuery, searchTrigger, curre
 
   // Haritaya tıklandığında
   const onMapClick = useCallback((e: google.maps.MapMouseEvent) => {
-    if (e.latLng) {
+    if (e.latLng && window.google && window.google.maps && window.google.maps.Geocoder) {
       const lat = e.latLng.lat();
       const lng = e.latLng.lng();
       const position = { lat, lng };
-      
+
       setMarkerPosition(position);
 
       // Reverse geocoding ile adresi al
@@ -97,6 +106,15 @@ const LocationPickerMap = ({ onLocationSelect, searchQuery, searchTrigger, curre
             lng,
             address
           });
+        } else {
+          console.warn('Reverse geocoding başarısız:', status);
+          // Geocoding başarısız olursa koordinatları göster
+          const coordAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          onLocationSelect({
+            lat,
+            lng,
+            address: coordAddress
+          });
         }
       });
     }
@@ -104,7 +122,7 @@ const LocationPickerMap = ({ onLocationSelect, searchQuery, searchTrigger, curre
 
   // Arama yapıldığında (searchTrigger değiştiğinde)
   useEffect(() => {
-    if (searchQuery && searchTrigger && searchTrigger > 0 && map) {
+    if (searchQuery && searchTrigger && searchTrigger > 0 && map && window.google && window.google.maps && window.google.maps.Geocoder) {
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({ address: searchQuery }, (results, status) => {
         if (status === 'OK' && results && results[0]) {
@@ -112,7 +130,7 @@ const LocationPickerMap = ({ onLocationSelect, searchQuery, searchTrigger, curre
           const lat = location.lat();
           const lng = location.lng();
           const position = { lat, lng };
-          
+
           setMarkerPosition(position);
           setCenter(position);
           map.panTo(position);
@@ -145,10 +163,22 @@ const LocationPickerMap = ({ onLocationSelect, searchQuery, searchTrigger, curre
     return (
       <div className="h-full w-full bg-red-50 flex items-center justify-center">
         <div className="text-center p-4">
-          <p className="text-red-600 font-medium">Harita yüklenemedi</p>
-          <p className="text-sm text-red-500 mt-2">Google Maps API hatası</p>
-          <p className="text-xs text-gray-500 mt-1">Lütfen internet bağlantınızı kontrol edin</p>
-          <p className="text-xs text-gray-400 mt-2">Hata: {loadError.message}</p>
+          <div className="text-red-500 mb-4">
+            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <p className="text-red-600 font-medium mb-2">Harita yüklenemedi</p>
+          <p className="text-sm text-red-500 mb-2">Google Maps API hatası</p>
+          <p className="text-xs text-gray-500 mb-4">Lütfen sayfayı yenileyin veya internet bağlantınızı kontrol edin</p>
+          {!apiKey && (
+            <p className="text-xs text-red-500 bg-red-100 p-2 rounded mb-2">
+              ⚠️ Google Maps API anahtarı bulunamadı!
+            </p>
+          )}
+          <p className="text-xs text-gray-400">
+            Hata detayı: {loadError.message}
+          </p>
         </div>
       </div>
     );
@@ -156,17 +186,24 @@ const LocationPickerMap = ({ onLocationSelect, searchQuery, searchTrigger, curre
 
   if (!isLoaded) {
     return (
-      <div className="h-full w-full bg-gray-100 flex items-center justify-center">
-        <div className="text-center px-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-2"></div>
-          <p className="text-gray-500 font-medium">Harita yükleniyor...</p>
-          <p className="text-xs text-gray-400 mt-1">Google Maps hazırlanıyor</p>
+      <div className="h-full w-full bg-gray-50 flex items-center justify-center">
+        <div className="text-center px-6">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-200 border-t-orange-500 mx-auto mb-4"></div>
+          <p className="text-gray-700 font-medium mb-2">Harita yükleniyor...</p>
+          <p className="text-sm text-gray-500 mb-4">Google Maps hazırlanıyor</p>
           {!apiKey && (
-            <p className="text-xs text-red-500 mt-2">⚠️ API Key bulunamadı!</p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+              <p className="text-xs text-red-600 font-medium">⚠️ API Anahtarı Hatası</p>
+              <p className="text-xs text-red-500 mt-1">
+                Google Maps API anahtarı bulunamadı. Lütfen .env.local dosyasına NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ekleyin.
+              </p>
+            </div>
           )}
-          <p className="text-xs text-gray-400 mt-2">
-            Bu işlem birkaç saniye sürebilir
-          </p>
+          <div className="space-y-2 text-xs text-gray-400">
+            <p>• İnternet bağlantınız kontrol ediliyor</p>
+            <p>• Google Maps API yükleniyor</p>
+            <p>• Harita bileşenleri hazırlanıyor</p>
+          </div>
         </div>
       </div>
     );

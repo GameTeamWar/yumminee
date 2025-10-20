@@ -103,7 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
       if (path.startsWith('/shop') || path.includes('shop')) {
-        return 'shop';
+        return 'restaurant';
       } else if (path.startsWith('/courier') || path.includes('courier')) {
         return 'courier';
       } else {
@@ -395,10 +395,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('auth-user-logout-triggered');
       }, 100);
 
-      // Çıkış sonrası ana sayfaya yönlendir
-      if (typeof window !== 'undefined') {
-        window.location.href = '/';
-      }
+      // Çıkış sonrası yönlendirme AuthContext'ten kaldırıldı - component seviyesinde yapılacak
     } catch (error: any) {
       throw new Error(getAuthErrorMessage(error.code));
     }

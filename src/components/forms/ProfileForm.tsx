@@ -17,6 +17,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { updateUserProfile, uploadProfilePicture, deleteProfilePicture } from '@/lib/firebase/db';
+import { updateProfile } from 'firebase/auth';
+import { auth } from '@/lib/firebase/config';
 import { Loader2, Camera, X, Upload } from 'lucide-react';
 
 // Profil şeması
@@ -135,6 +137,13 @@ export default function ProfileForm({ userProfile, onUpdateSuccess }: ProfileFor
       // Email'i formdan çıkar (auth üzerinden yönetiliyor)
       const { email, ...profileData } = data;
       
+      // Firebase Auth'da displayName'i güncelle
+      if (auth.currentUser && data.displayName !== userProfile?.displayName) {
+        await updateProfile(auth.currentUser, {
+          displayName: data.displayName
+        });
+      }
+      
       // Profili güncelle
       const updatedProfile = await updateUserProfile(userProfile.id, profileData);
       
@@ -240,7 +249,7 @@ export default function ProfileForm({ userProfile, onUpdateSuccess }: ProfileFor
           name="displayName"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Ad Soyad</FormLabel>
+              <FormLabel className="text-sm font-medium text-gray-700">Ad Soyad</FormLabel>
               <FormControl>
                 <Input 
                   placeholder="Ad Soyad" 

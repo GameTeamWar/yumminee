@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, orderBy, onSnapshot, where, updateDoc, deleteDoc, doc } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, where, updateDoc, deleteDoc, doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { getRestaurantByOwnerId } from '@/lib/firebase/db'
 import { useAuth } from '@/contexts/AuthContext'

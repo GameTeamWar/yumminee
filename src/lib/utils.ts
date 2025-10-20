@@ -13,7 +13,9 @@ if (typeof window !== 'undefined') {
       typeof args[0] === 'string' &&
       (args[0].includes('Hydration failed') ||
        args[0].includes('hydrated but some attributes') ||
-       args[0].includes('bis_skin_checked'))
+       args[0].includes('bis_skin_checked') ||
+       args[0].includes('Konum alınamadı') ||
+       args[0].includes('Google Maps API henüz yüklenmedi'))
     ) {
       return;
     }
